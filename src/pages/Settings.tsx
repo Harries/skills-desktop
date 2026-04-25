@@ -4,9 +4,6 @@ import { useSkillStore } from '../store/useSkillStore';
 import { Plus, X, FolderOpen, ExternalLink, Package, Check, Cpu, Settings2, Palette, AlertTriangle, Globe, Link2, Link2Off, RefreshCw, Monitor, CheckCircle2, Github, Heart, MessageCircle, Terminal, Key, Server, Eye, EyeOff, Save, RotateCcw, Play, XCircle, Shield, Search } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 
-// Native agents that are already managed in the built-in symlink/native sections
-const NATIVE_AGENT_IDS = new Set(['claude-code', 'github-copilot', 'cursor', 'opencode', 'antigravity', 'amp']);
-
 // Known agent global paths for custom symlink quick-select (excluding native agents)
 const KNOWN_AGENT_PATHS: { name: string; id: string; globalPath: string }[] = [
   { name: 'Kimi Code CLI', id: 'kimi-cli', globalPath: '~/.config/agents/skills/' },

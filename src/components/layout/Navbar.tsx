@@ -1,7 +1,19 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Sun, Moon, Boxes, ShoppingBag, Settings } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Sun, Moon, Boxes, ShoppingBag, Settings, ChevronDown } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+
+const LANGUAGES = [
+    { code: 'en', label: 'English', flag: '🇬🇧' },
+    { code: 'zh', label: '中文', flag: '🇨🇳' },
+    { code: 'ja', label: '日本語', flag: '🇯🇵' },
+    { code: 'ko', label: '한국어', flag: '🇰🇷' },
+    { code: 'es', label: 'Español', flag: '🇪🇸' },
+    { code: 'fr', label: 'Français', flag: '🇫🇷' },
+    { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
+    { code: 'pt', label: 'Português', flag: '🇧🇷' },
+    { code: 'ar', label: 'العربية', flag: '🇸🇦' },
+];
 
 function Navbar() {
     const location = useLocation();
@@ -44,10 +56,21 @@ function Navbar() {
         setTheme(newTheme);
     };
 
-    const toggleLanguage = () => {
-        const newLang = i18n.language === 'zh' ? 'en' : 'zh';
-        i18n.changeLanguage(newLang);
-    };
+    const [langOpen, setLangOpen] = useState(false);
+    const langRef = useRef<HTMLDivElement>(null);
+
+    // Close dropdown on outside click
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (langRef.current && !langRef.current.contains(e.target as Node)) {
+                setLangOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const currentLang = LANGUAGES.find(l => l.code === i18n.language) || LANGUAGES[0];
 
     return (
         <nav
@@ -85,16 +108,35 @@ function Navbar() {
 
                     {/* Right Actions */}
                     <div className="flex items-center gap-2">
-                        {/* Language Toggle */}
-                        <button
-                            onClick={toggleLanguage}
-                            className="w-10 h-10 rounded-full bg-gray-100 dark:bg-base-200 hover:bg-gray-200 dark:hover:bg-base-100 flex items-center justify-center transition-colors"
-                            title={i18n.language === 'zh' ? 'Switch to English' : '切换到中文'}
-                        >
-                            <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                                {i18n.language === 'zh' ? 'EN' : '中'}
-                            </span>
-                        </button>
+                        {/* Language Selector */}
+                        <div className="relative" ref={langRef}>
+                            <button
+                                onClick={() => setLangOpen(!langOpen)}
+                                className="h-10 px-3 rounded-full bg-gray-100 dark:bg-base-200 hover:bg-gray-200 dark:hover:bg-base-100 flex items-center gap-1.5 transition-colors"
+                            >
+                                <span className="text-sm">{currentLang.flag}</span>
+                                <span className="text-xs font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">{currentLang.label}</span>
+                                <ChevronDown size={12} className={`text-gray-500 transition-transform ${langOpen ? 'rotate-180' : ''}`} />
+                            </button>
+                            {langOpen && (
+                                <div className="absolute right-0 top-12 w-44 bg-white dark:bg-base-200 rounded-xl shadow-lg border border-gray-200 dark:border-base-300 py-1 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                                    {LANGUAGES.map(lang => (
+                                        <button
+                                            key={lang.code}
+                                            onClick={() => { i18n.changeLanguage(lang.code); setLangOpen(false); }}
+                                            className={`w-full px-3 py-2 flex items-center gap-2.5 text-sm transition-colors ${
+                                                i18n.language === lang.code
+                                                    ? 'bg-primary/10 text-primary font-medium'
+                                                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-base-100'
+                                            }`}
+                                        >
+                                            <span className="text-base">{lang.flag}</span>
+                                            <span>{lang.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
 
                         {/* Theme Toggle */}
                         <button

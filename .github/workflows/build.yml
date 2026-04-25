@@ -1,16 +1,27 @@
 name: Build
 
+# [DISABLED] Auto-build on main/master push is disabled.
+# Only tag-based releases (via release.yml) trigger builds now.
+# To re-enable, uncomment the triggers below.
+#
+# on:
+#   push:
+#     branches:
+#       - master
+#       - main
+#   pull_request:
+#     branches:
+#       - master
+#       - main
+#   repository_dispatch:
+#     types: [data-updated]
 on:
-  push:
-    branches:
-      - master
-      - main
-  pull_request:
-    branches:
-      - master
-      - main
-  repository_dispatch:
-    types: [data-updated]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Auto-build is disabled. Set to true to run manually.'
+        required: true
+        default: 'false'
 
 permissions:
   contents: write

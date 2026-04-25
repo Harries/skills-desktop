@@ -56,7 +56,7 @@ const agentColors: Record<string, string> = {
 };
 
 const Settings = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const {
     projectPaths,
     fetchProjectPaths,
@@ -208,15 +208,13 @@ const Settings = () => {
         setSymlinkToast({
           show: true,
           success: false,
-          message: i18n.language === 'zh'
-            ? `${successCount} 个成功，${failCount} 个失败${errorMsgs.length > 0 ? '\n' + errorMsgs.join('\n') : ''}`
-            : `${successCount} succeeded, ${failCount} failed${errorMsgs.length > 0 ? '\n' + errorMsgs.join('\n') : ''}`
+          message: t('symlinkPartialFail', { success: successCount, fail: failCount }) + (errorMsgs.length > 0 ? '\n' + errorMsgs.join('\n') : '')
         });
       } else {
         setSymlinkToast({
           show: true,
           success: true,
-          message: i18n.language === 'zh' ? `全部 ${successCount} 个软链接创建成功` : `All ${successCount} symlinks created successfully`
+          message: t('symlinkSuccessAll', { count: successCount })
         });
       }
     } catch (error) {
@@ -224,7 +222,7 @@ const Settings = () => {
       setSymlinkToast({
         show: true,
         success: false,
-        message: i18n.language === 'zh' ? `创建失败: ${error}` : `Creation failed: ${error}`
+        message: t('creationFailed', { error })
       });
     } finally {
       setIsCreatingSymlinks(false);
@@ -246,7 +244,7 @@ const Settings = () => {
         setSymlinkToast({
           show: true,
           success: true,
-          message: i18n.language === 'zh' ? `${status.agentName} 软链接创建成功` : `${status.agentName} symlink created`
+          message: t('symlinkCreated', { name: status.agentName })
         });
       }
     } catch (error) {
@@ -254,7 +252,7 @@ const Settings = () => {
       setSymlinkToast({
         show: true,
         success: false,
-        message: i18n.language === 'zh' ? `创建失败: ${error}` : `Creation failed: ${error}`
+        message: t('creationFailed', { error })
       });
     } finally {
       setActionInProgress(null);
@@ -269,14 +267,14 @@ const Settings = () => {
       setSymlinkToast({
         show: true,
         success: true,
-        message: i18n.language === 'zh' ? `${status.agentName} 软链接已移除` : `${status.agentName} symlink removed`
+        message: t('symlinkRemoved', { name: status.agentName })
       });
     } catch (error) {
       console.error(`Failed to remove symlink for ${agentId}:`, error);
       setSymlinkToast({
         show: true,
         success: false,
-        message: i18n.language === 'zh' ? `移除失败: ${error}` : `Remove failed: ${error}`
+        message: t('removeFailed', { error })
       });
     } finally {
       setActionInProgress(null);
@@ -317,7 +315,7 @@ const Settings = () => {
       setTestResult({
         show: true,
         success: false,
-        message: i18n.language === 'zh' ? '请先配置 API 地址' : 'Please configure API URL first'
+        message: t('configureApiFirst')
       });
       setTimeout(() => setTestResult({show: false, success: false, message: ''}), 3000);
       return;
@@ -361,16 +359,14 @@ const Settings = () => {
       setTestResult({
         show: true,
         success: true,
-        message: i18n.language === 'zh' 
-          ? `测试成功! 状态: ${response.status}` 
-          : `Test Success! Status: ${response.status}`
+        message: t('testSuccess', { status: response.status })
       });
     } catch (error) {
       console.error('API Test Error:', error);
       setTestResult({
         show: true,
         success: false,
-        message: i18n.language === 'zh' ? `测试失败: ${error}` : `Test Failed: ${error}`
+        message: t('testFailed', { error })
       });
     } finally {
       setTimeout(() => setTestResult({show: false, success: false, message: ''}), 5000);
@@ -417,7 +413,7 @@ const Settings = () => {
                   {platform.os === 'windows' && (
                     <span className="text-warning flex items-center gap-1">
                       <AlertTriangle size={12} />
-                      {i18n.language === 'zh' ? '需管理员权限' : 'Admin required'}
+                      {t('adminRequired')}
                     </span>
                   )}
                 </>
@@ -440,10 +436,10 @@ const Settings = () => {
               </div>
               <div className="flex-1">
                 <span className="font-semibold">
-                  {i18n.language === 'zh' ? '原生兼容 Agents' : 'Native Compatible Agents'}
+                  {t('nativeCompatibleAgents')}
                 </span>
                 <span className="ml-2 text-xs text-base-content/50">
-                  {nativeAgents.length} {i18n.language === 'zh' ? '个' : 'agents'}
+                  {nativeAgents.length} {t('agentsCount')}
                 </span>
               </div>
               <div className="flex -space-x-1">
@@ -476,9 +472,7 @@ const Settings = () => {
               ))}
             </div>
             <p className="text-xs text-base-content/50 mt-3">
-              {i18n.language === 'zh'
-                ? '这些 Agents 自动扫描 Claude Code Skills 目录，无需额外配置'
-                : 'These agents auto-scan Claude Code skills directory, no configuration needed'}
+              {t('nativeAgentsDesc')}
             </p>
           </div>
         </div>
@@ -497,15 +491,15 @@ const Settings = () => {
               </div>
               <div className="flex-1">
                 <span className="font-semibold">
-                  {i18n.language === 'zh' ? '软链接配置' : 'Symlink Configuration'}
+                  {t('symlinkConfig')}
                 </span>
                 <span className="ml-2 text-xs text-base-content/50">
-                  {linkedCount + customSymlinks.filter(s => s.exists).length}/{symlinkRequiredAgents.length + customSymlinks.length} {i18n.language === 'zh' ? '已链接' : 'linked'}
+                  {linkedCount + customSymlinks.filter(s => s.exists).length}/{symlinkRequiredAgents.length + customSymlinks.length} {t('linked')}
                 </span>
               </div>
               {linkedCount < symlinkRequiredAgents.length && (
                 <span className="stat-badge bg-warning/20 text-warning text-xs">
-                  {symlinkRequiredAgents.length - linkedCount} {i18n.language === 'zh' ? '待配置' : 'pending'}
+                  {symlinkRequiredAgents.length - linkedCount} {t('pendingConfig')}
                 </span>
               )}
             </div>
@@ -549,7 +543,7 @@ const Settings = () => {
                         ) : (
                           <Link2Off size={12} />
                         )}
-                        {i18n.language === 'zh' ? '移除' : 'Remove'}
+                        {t('removeText')}
                       </button>
                     ) : (
                       <button
@@ -562,7 +556,7 @@ const Settings = () => {
                         ) : (
                           <Link2 size={12} />
                         )}
-                        {i18n.language === 'zh' ? '链接' : 'Link'}
+                        {t('linkText')}
                       </button>
                     )}
                   </div>
@@ -584,7 +578,7 @@ const Settings = () => {
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm flex items-center gap-1.5">
                     {symlink.path.split('/').pop() || symlink.path}
-                    <span className="badge badge-xs badge-secondary badge-outline">{i18n.language === 'zh' ? '自定义' : 'Custom'}</span>
+                    <span className="badge badge-xs badge-secondary badge-outline">{t('customLabel')}</span>
                   </div>
                   <div className="text-xs text-base-content/40 font-mono truncate" title={symlink.path}>
                     {symlink.path}
@@ -602,8 +596,8 @@ const Settings = () => {
                             show: true,
                             success: ok,
                             message: ok
-                              ? (i18n.language === 'zh' ? `已移除: ${symlink.path}` : `Removed: ${symlink.path}`)
-                              : (i18n.language === 'zh' ? `移除失败: ${symlink.path}` : `Remove failed: ${symlink.path}`)
+                              ? t('removedPath', { path: symlink.path })
+                              : t('removeFailedPath', { path: symlink.path })
                           });
                         } catch (e) {
                           setSymlinkToast({ show: true, success: false, message: `${e}` });
@@ -619,7 +613,7 @@ const Settings = () => {
                       ) : (
                         <Link2Off size={12} />
                       )}
-                      {i18n.language === 'zh' ? '移除' : 'Remove'}
+                      {t('removeText')}
                     </button>
                   ) : (
                     <button
@@ -632,8 +626,8 @@ const Settings = () => {
                             show: true,
                             success: result.success,
                             message: result.success
-                              ? (i18n.language === 'zh' ? `已链接: ${symlink.path}` : `Linked: ${symlink.path}`)
-                              : (result.error || (i18n.language === 'zh' ? `链接失败: ${symlink.path}` : `Link failed: ${symlink.path}`))
+                              ? t('linkedPath', { path: symlink.path })
+                              : (result.error || t('linkFailedPath', { path: symlink.path }))
                           });
                         } catch (e) {
                           setSymlinkToast({ show: true, success: false, message: `${e}` });
@@ -649,13 +643,13 @@ const Settings = () => {
                       ) : (
                         <Link2 size={12} />
                       )}
-                      {i18n.language === 'zh' ? '链接' : 'Link'}
+                      {t('linkText')}
                     </button>
                   )}
                   <button
                     className="btn btn-xs btn-ghost text-base-content/40 hover:text-error"
                     onClick={() => removeCustomSymlinkPath(symlink.path)}
-                    title={i18n.language === 'zh' ? '删除此条目' : 'Delete this entry'}
+                    title={t('deleteEntry')}
                   >
                     <X size={12} />
                   </button>
@@ -674,21 +668,21 @@ const Settings = () => {
                 ) : (
                   <Link2 size={14} />
                 )}
-                {i18n.language === 'zh' ? '一键配置全部' : 'Setup All'}
+                {t('setupAll')}
               </button>
               <button
                 className="btn btn-sm btn-ghost gap-2"
                 onClick={() => { checkSymlinkStatus(); checkCustomSymlinks(); }}
               >
                 <RefreshCw size={14} />
-                {i18n.language === 'zh' ? '刷新' : 'Refresh'}
+                {t('refreshText')}
               </button>
               <button
                 className="btn btn-sm btn-secondary gap-2"
                 onClick={() => setShowCustomSymlinkModal(true)}
               >
                 <Plus size={14} />
-                {i18n.language === 'zh' ? '自定义软链接' : 'Custom Symlink'}
+                {t('customSymlink')}
               </button>
             </div>
           </div>
@@ -706,19 +700,17 @@ const Settings = () => {
               </button>
               <h3 className="font-bold text-lg flex items-center gap-2 mb-1">
                 <Plus size={18} className="text-secondary" />
-                {i18n.language === 'zh' ? '添加自定义软链接' : 'Add Custom Symlink'}
+                {t('addCustomSymlink')}
               </h3>
               <p className="text-xs text-base-content/50 mb-4">
-                {i18n.language === 'zh'
-                  ? '选择已知 Agent 或手动输入自定义路径'
-                  : 'Select a known agent or enter a custom path manually'}
+                {t('customSymlinkDesc')}
               </p>
 
               {/* Manual input */}
               <div className="flex gap-2 mb-4">
                 <input
                   type="text"
-                  placeholder={i18n.language === 'zh' ? '输入目标路径，如 ~/.trae-cn/skills' : 'Target path, e.g. ~/.trae-cn/skills'}
+                  placeholder={t('targetPathPlaceholder')}
                   className="input input-bordered bg-base-200 flex-1 rounded-xl text-sm font-mono"
                   value={newCustomPath}
                   onChange={(e) => setNewCustomPath(e.target.value)}
@@ -727,7 +719,7 @@ const Settings = () => {
                       const path = newCustomPath.trim();
                       const existingPaths = getExistingPathSet();
                       if (existingPaths.has(normalizePath(path))) {
-                        setSymlinkToast({ show: true, success: false, message: i18n.language === 'zh' ? `该路径已添加过: ${path}` : `Path already configured: ${path}` });
+                        setSymlinkToast({ show: true, success: false, message: t('pathAlreadyConfigured', { path }) });
                         setTimeout(() => setSymlinkToast({show: false, success: false, message: ''}), 3000);
                         return;
                       }
@@ -747,7 +739,7 @@ const Settings = () => {
                     if (!path) return;
                     const existingPaths = getExistingPathSet();
                     if (existingPaths.has(normalizePath(path))) {
-                      setSymlinkToast({ show: true, success: false, message: i18n.language === 'zh' ? `该路径已添加过: ${path}` : `Path already configured: ${path}` });
+                      setSymlinkToast({ show: true, success: false, message: t('pathAlreadyConfigured', { path }) });
                       setTimeout(() => setSymlinkToast({show: false, success: false, message: ''}), 3000);
                       return;
                     }
@@ -758,7 +750,7 @@ const Settings = () => {
                   }}
                 >
                   <Plus size={14} />
-                  {i18n.language === 'zh' ? '添加' : 'Add'}
+                  {t('addText')}
                 </button>
               </div>
 
@@ -768,7 +760,7 @@ const Settings = () => {
                   <Search size={14} className="text-base-content/40" />
                   <input
                     type="text"
-                    placeholder={i18n.language === 'zh' ? '搜索 Agent...' : 'Search agents...'}
+                    placeholder={t('searchAgents')}
                     className="bg-transparent text-sm flex-1 outline-none placeholder:text-base-content/30"
                     value={agentSearchQuery}
                     onChange={(e) => setAgentSearchQuery(e.target.value)}
@@ -789,7 +781,7 @@ const Settings = () => {
                     if (filtered.length === 0) {
                       return (
                         <div className="text-center py-6 text-base-content/30 text-sm">
-                          {i18n.language === 'zh' ? '未找到匹配的 Agent' : 'No matching agents found'}
+                          {t('noMatchingAgents')}
                         </div>
                       );
                     }
@@ -818,7 +810,7 @@ const Settings = () => {
                               {agent.name}
                               {isExisting && (
                                 <span className="badge badge-xs badge-ghost text-base-content/40">
-                                  {i18n.language === 'zh' ? '已添加' : 'Added'}
+                                  {t('addedLabel')}
                                 </span>
                               )}
                             </div>
@@ -841,7 +833,7 @@ const Settings = () => {
                   className="btn btn-ghost rounded-xl"
                   onClick={() => { setShowCustomSymlinkModal(false); setNewCustomPath(''); setAgentSearchQuery(''); }}
                 >
-                  {i18n.language === 'zh' ? '关闭' : 'Close'}
+                  {t('closeText')}
                 </button>
               </div>
             </div>
@@ -863,12 +855,12 @@ const Settings = () => {
               </div>
               <div className="flex-1">
                 <span className="font-semibold">
-                  {i18n.language === 'zh' ? 'API 配置' : 'API Configuration'}
+                  {t('apiConfiguration')}
                 </span>
               </div>
               {(apiUrl || apiKey) && (
                 <span className="stat-badge bg-success/20 text-success text-xs">
-                  {i18n.language === 'zh' ? '已配置' : 'Configured'}
+                  {t('configured')}
                 </span>
               )}
             </div>
@@ -879,7 +871,7 @@ const Settings = () => {
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-2">
                   <Globe size={14} className="text-base-content/50" />
-                  {i18n.language === 'zh' ? 'API 地址' : 'API URL'}
+                  {t('apiUrl')}
                 </label>
                 <input
                   type="text"
@@ -889,9 +881,7 @@ const Settings = () => {
                   onChange={(e) => setLocalApiUrl(e.target.value)}
                 />
                 <p className="text-xs text-base-content/50">
-                  {i18n.language === 'zh' 
-                    ? '配置 Skills 市场的 API 端点地址' 
-                    : 'Configure the API endpoint URL for Skills Marketplace'}
+                  {t('apiUrlDesc')}
                 </p>
               </div>
 
@@ -899,7 +889,7 @@ const Settings = () => {
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-2">
                   <Key size={14} className="text-base-content/50" />
-                  {i18n.language === 'zh' ? 'API 密钥' : 'API Key'}
+                  {t('apiKey')}
                 </label>
                 <div className="relative">
                   <input
@@ -918,17 +908,15 @@ const Settings = () => {
                   </button>
                 </div>
                 <p className="text-xs text-base-content/50">
-                  {i18n.language === 'zh' 
-                    ? '用于 API 认证的 Bearer Token' 
-                    : 'Bearer token for API authentication'}
-                  {' • '}
+                  {t('bearerTokenDesc')}
+                  {' \u2022 '}
                   <a 
                     href="https://skills.lc/docs/api-reference" 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="text-primary hover:underline"
                   >
-                    {i18n.language === 'zh' ? '获取密钥' : 'Get API Key'}
+                    {t('getApiKey')}
                   </a>
                 </p>
               </div>
@@ -945,12 +933,12 @@ const Settings = () => {
                   {apiSaved ? (
                     <>
                       <Check size={14} />
-                      {i18n.language === 'zh' ? '已保存' : 'Saved'}
+                      {t('saved')}
                     </>
                   ) : (
                     <>
                       <Save size={14} />
-                      {i18n.language === 'zh' ? '保存配置' : 'Save Settings'}
+                      {t('saveSettings')}
                     </>
                   )}
                 </button>
@@ -959,7 +947,7 @@ const Settings = () => {
                   onClick={handleTestApi}
                 >
                   <Play size={14} />
-                  {i18n.language === 'zh' ? '测试连接' : 'Test'}
+                  {t('testConnection')}
                 </button>
                 <button
                   className="btn btn-sm btn-ghost gap-2 text-base-content/60 hover:text-error"
@@ -967,12 +955,12 @@ const Settings = () => {
                   disabled={apiSaved || (!localApiUrl && !localApiKey)}
                 >
                   <RotateCcw size={14} />
-                  {i18n.language === 'zh' ? '重置' : 'Reset'}
+                  {t('resetText')}
                 </button>
                 {(localApiUrl !== apiUrl || localApiKey !== apiKey) && (
                   <span className="text-xs text-warning flex items-center gap-1">
                     <AlertTriangle size={12} />
-                    {i18n.language === 'zh' ? '有未保存的更改' : 'Unsaved changes'}
+                    {t('unsavedChanges')}
                   </span>
                 )}
               </div>
@@ -998,9 +986,7 @@ const Settings = () => {
               {/* Info */}
               <div className="bg-base-100 rounded-xl p-3 text-xs text-base-content/60 space-y-2">
                 <p>
-                  {i18n.language === 'zh' 
-                    ? '默认使用本地数据，配置 API 后才会从接口获取数据' 
-                    : 'Uses local data by default. Configure API to fetch from remote.'}
+                  {t('localDataDefault')}
                 </p>
                 <p className="font-mono text-[10px] text-base-content/40">
                   API: https://skills.lc/api/v1/skills/search
@@ -1024,16 +1010,16 @@ const Settings = () => {
               </div>
               <div className="flex-1">
                 <span className="font-semibold">
-                  {i18n.language === 'zh' ? '代理设置' : 'Proxy Settings'}
+                  {t('proxySettings')}
                 </span>
               </div>
               {proxyEnabled && storeProxyUrl ? (
                 <span className="stat-badge bg-success/20 text-success text-xs">
-                  {i18n.language === 'zh' ? '已启用' : 'Enabled'}
+                  {t('enabled')}
                 </span>
               ) : (
                 <span className="stat-badge bg-base-300 text-xs">
-                  {i18n.language === 'zh' ? '未启用' : 'Disabled'}
+                  {t('disabled')}
                 </span>
               )}
             </div>
@@ -1044,12 +1030,10 @@ const Settings = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium">
-                    {i18n.language === 'zh' ? '启用代理' : 'Enable Proxy'}
+                    {t('enableProxy')}
                   </div>
                   <p className="text-xs text-base-content/50 mt-0.5">
-                    {i18n.language === 'zh'
-                      ? '启用后，所有外部请求将通过代理服务器'
-                      : 'When enabled, all external requests will go through the proxy'}
+                    {t('proxyDesc')}
                   </p>
                 </div>
                 <input
@@ -1064,7 +1048,7 @@ const Settings = () => {
               <div className={`space-y-2 transition-opacity ${localProxyEnabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
                 <label className="text-sm font-medium flex items-center gap-2">
                   <Globe size={14} className="text-base-content/50" />
-                  {i18n.language === 'zh' ? '代理地址' : 'Proxy URL'}
+                  {t('proxyUrl')}
                 </label>
                 <input
                   type="text"
@@ -1074,9 +1058,7 @@ const Settings = () => {
                   onChange={(e) => setLocalProxyUrl(e.target.value)}
                 />
                 <p className="text-xs text-base-content/50">
-                  {i18n.language === 'zh'
-                    ? '支持 HTTP/HTTPS/SOCKS5 代理，例如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080'
-                    : 'Supports HTTP/HTTPS/SOCKS5 proxy, e.g. http://127.0.0.1:7890 or socks5://127.0.0.1:1080'}
+                  {t('proxyProtocolDesc')}
                 </p>
               </div>
         
@@ -1095,12 +1077,12 @@ const Settings = () => {
                   {proxySaved ? (
                     <>
                       <Check size={14} />
-                      {i18n.language === 'zh' ? '已保存' : 'Saved'}
+                      {t('saved')}
                     </>
                   ) : (
                     <>
                       <Save size={14} />
-                      {i18n.language === 'zh' ? '保存设置' : 'Save Settings'}
+                      {t('saveSettings')}
                     </>
                   )}
                 </button>
@@ -1117,12 +1099,12 @@ const Settings = () => {
                   disabled={proxySaved || (!localProxyEnabled && !localProxyUrl)}
                 >
                   <RotateCcw size={14} />
-                  {i18n.language === 'zh' ? '重置' : 'Reset'}
+                  {t('resetText')}
                 </button>
                 {(localProxyEnabled !== proxyEnabled || localProxyUrl !== storeProxyUrl) && (
                   <span className="text-xs text-warning flex items-center gap-1">
                     <AlertTriangle size={12} />
-                    {i18n.language === 'zh' ? '有未保存的更改' : 'Unsaved changes'}
+                    {t('unsavedChanges')}
                   </span>
                 )}
               </div>
@@ -1130,9 +1112,7 @@ const Settings = () => {
               {/* Info */}
               <div className="bg-base-100 rounded-xl p-3 text-xs text-base-content/60 space-y-1">
                 <p>
-                  {i18n.language === 'zh'
-                    ? '代理将应用于：API 请求、GitHub Skill 下载（git clone）等所有外部网络请求'
-                    : 'Proxy applies to: API requests, GitHub skill downloads (git clone), and all external network requests'}
+                  {t('proxyAppliesTo')}
                 </p>
               </div>
             </div>
@@ -1153,14 +1133,11 @@ const Settings = () => {
               </div>
               <div className="flex-1">
                 <span className="font-semibold">
-                  {i18n.language === 'zh' ? '安装设置' : 'Installation Settings'}
+                  {t('installSettings')}
                 </span>
               </div>
               <span className="stat-badge bg-base-300 text-xs">
-                {defaultInstallLocation === 'system'
-                  ? (i18n.language === 'zh' ? '全局' : 'Global')
-                  : (i18n.language === 'zh' ? '项目' : 'Project')
-                }
+                {defaultInstallLocation === 'system' ? t('globalLabel') : t('projectLabel')}
               </span>
             </div>
           </div>
@@ -1185,13 +1162,13 @@ const Settings = () => {
                   />
                   <div className="flex-1">
                     <div className="font-medium text-sm flex items-center gap-2">
-                      {i18n.language === 'zh' ? '系统全局目录' : 'System Global Directory'}
+                      {t('systemGlobalDir')}
                       <span className="stat-badge bg-success/10 text-success text-xs">
-                        {i18n.language === 'zh' ? '推荐' : 'Recommended'}
+                        {t('recommended')}
                       </span>
                     </div>
                     <p className="text-xs text-base-content/50 mt-0.5">
-                      ~/.claude/skills • {i18n.language === 'zh' ? '所有项目都能访问' : 'Accessible to all projects'}
+                      ~/.claude/skills • {t('accessibleToAll')}
                     </p>
                   </div>
                 </div>
@@ -1216,10 +1193,10 @@ const Settings = () => {
                   />
                   <div className="flex-1">
                     <div className="font-medium text-sm">
-                      {i18n.language === 'zh' ? '项目专属目录' : 'Project-Specific Directory'}
+                      {t('projectSpecificDir')}
                     </div>
                     <p className="text-xs text-base-content/50 mt-0.5">
-                      .claude/skills • {i18n.language === 'zh' ? '可随项目版本控制' : 'Version controlled with project'}
+                      .claude/skills • {t('versionControlled')}
                     </p>
                   </div>
                 </div>
@@ -1257,7 +1234,7 @@ const Settings = () => {
                 {defaultInstallLocation === 'project' && projectPaths.length === 0 && (
                   <div className="mt-2 ml-7 text-xs text-warning flex items-center gap-1">
                     <AlertTriangle size={12} />
-                    {i18n.language === 'zh' ? '请先在下方添加项目路径' : 'Add project paths below first'}
+                    {t('addProjectPathsFirst')}
                   </div>
                 )}
               </div>
@@ -1281,7 +1258,7 @@ const Settings = () => {
                 <span className="font-semibold">{t('projectPaths')}</span>
               </div>
               <span className="stat-badge bg-base-300 text-xs">
-                {paths.length} {i18n.language === 'zh' ? '个' : 'paths'}
+                {t('pathsCount', { count: paths.length })}
               </span>
             </div>
           </div>
@@ -1289,7 +1266,7 @@ const Settings = () => {
             <div className="pt-2 space-y-2">
               {paths.length === 0 ? (
                 <div className="text-center py-6 text-base-content/40 border border-dashed border-base-300 rounded-xl text-sm">
-                  {i18n.language === 'zh' ? '暂无项目路径' : 'No project paths'}
+                  {t('noProjectPaths')}
                 </div>
               ) : (
                 paths.map((path, index) => (
@@ -1311,7 +1288,7 @@ const Settings = () => {
               <div className="flex gap-2 mt-3">
                 <input
                   type="text"
-                  placeholder={i18n.language === 'zh' ? '输入项目路径...' : 'Enter project path...'}
+                  placeholder={t('enterProjectPath')}
                   className="input input-sm bg-base-100 border-base-300 flex-1 rounded-lg text-sm"
                   value={newPath}
                   onChange={(e) => setNewPath(e.target.value)}
@@ -1323,7 +1300,7 @@ const Settings = () => {
                   disabled={!newPath.trim()}
                 >
                   <Plus size={14} />
-                  {i18n.language === 'zh' ? '添加' : 'Add'}
+                  {t('addText')}
                 </button>
               </div>
             </div>
@@ -1343,7 +1320,7 @@ const Settings = () => {
                 <Palette size={16} className="text-secondary" />
               </div>
               <span className="font-semibold">
-                {i18n.language === 'zh' ? '外观' : 'Appearance'}
+                {t('appearance')}
               </span>
             </div>
           </div>
@@ -1352,7 +1329,7 @@ const Settings = () => {
               <div className="flex items-center gap-3">
                 <span className="text-sm text-base-content/70">{t('theme')}</span>
                 <select className="select select-sm bg-base-100 border-base-300 rounded-lg">
-                  <option>{i18n.language === 'zh' ? '跟随系统' : 'Follow System'}</option>
+                  <option>{t('followSystem')}</option>
                   <option>{t('light')}</option>
                   <option>{t('dark')}</option>
                 </select>
@@ -1369,13 +1346,13 @@ const Settings = () => {
           <div className="bg-base-200/50 rounded-2xl p-4 border border-base-300">
             <h3 className="font-bold mb-4 flex items-center gap-2">
               <Package size={16} className="text-primary" />
-              {i18n.language === 'zh' ? '关于' : 'About'}
+              {t('about')}
             </h3>
 
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-base-content/60">{i18n.language === 'zh' ? '版本' : 'Version'}</span>
-                <span className="font-mono font-semibold">v1.3.3</span>
+                <span className="text-base-content/60">{t('versionLabel')}</span>
+                <span className="font-mono font-semibold">v1.3.4</span>
               </div>
 
               <div className="divider my-2"></div>
@@ -1427,7 +1404,7 @@ const Settings = () => {
                 }}
               >
                 <Heart size={14} />
-                <span>{i18n.language === 'zh' ? '反馈建议' : 'Feedback'}</span>
+                <span>{t('feedback')}</span>
                 <ExternalLink size={12} className="ml-auto" />
               </a>
             </div>
@@ -1436,7 +1413,7 @@ const Settings = () => {
           {/* Related Projects Card */}
           <div className="bg-base-200/50 rounded-2xl p-4 border border-base-300">
             <h3 className="font-bold mb-4">
-              {i18n.language === 'zh' ? '相关项目' : 'Related Projects'}
+              {t('relatedProjects')}
             </h3>
 
             <div className="space-y-3">
@@ -1463,14 +1440,14 @@ const Settings = () => {
                       <ExternalLink size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                     <p className="text-xs text-base-content/50 mt-0.5">
-                      {i18n.language === 'zh' ? 'Skill 管理的 Skill，更智能，更便捷' : 'A Skill for managing Skills, smarter and more convenient'}
+                      {t('skillManagerDesc')}
                     </p>
                   </div>
                 </div>
               </a>
 
               <div className="divider my-2 text-xs text-base-content/40">
-                {i18n.language === 'zh' ? '交流群' : 'Community'}
+                {t('community')}
               </div>
 
               {/* Join Group */}
@@ -1492,11 +1469,11 @@ const Settings = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-sm flex items-center gap-1">
-                      {i18n.language === 'zh' ? '加入交流群' : 'Join Community'}
+                      {t('joinCommunity')}
                       <ExternalLink size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                     <p className="text-xs text-base-content/50 mt-0.5">
-                      {i18n.language === 'zh' ? '反馈问题、功能建议' : 'Feedback & suggestions'}
+                      {t('feedbackSuggestions')}
                     </p>
                   </div>
                 </div>
@@ -1511,7 +1488,7 @@ const Settings = () => {
               <div className="p-1 bg-gradient-to-br from-pink-500/20 to-rose-400/20 rounded-md">
                 <Heart size={14} className="text-pink-500" />
               </div>
-              {i18n.language === 'zh' ? '赞助商' : 'Sponsors'}
+              {t('sponsors')}
             </h3>
 
             <div className="space-y-2.5 relative">
@@ -1537,7 +1514,7 @@ const Settings = () => {
                       <ExternalLink size={10} className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-500" />
                     </div>
                     <p className="text-xs text-base-content/50 mt-0.5">
-                      {i18n.language === 'zh' ? '将 Telegram 变成你的服务台' : 'Turn Telegram into Your Help Desk'}
+                      {t('talkTgDesc')}
                     </p>
                   </div>
                 </div>
@@ -1565,7 +1542,7 @@ const Settings = () => {
                       <ExternalLink size={10} className="opacity-0 group-hover:opacity-100 transition-opacity text-emerald-500" />
                     </div>
                     <p className="text-xs text-base-content/50 mt-0.5">
-                      {i18n.language === 'zh' ? '检测你的网站是否真正安全' : 'Know If Your Site Is Truly Secure'}
+                      {t('isSafeSiteDesc')}
                     </p>
                   </div>
                 </div>

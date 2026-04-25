@@ -1410,7 +1410,7 @@ async fn fetch_api(request: FetchApiRequest) -> Result<FetchApiResponse, String>
     
     req_builder = req_builder
         .header("Content-Type", "application/json")
-        .header("User-Agent", "SkillsDesktop/1.3.3");
+        .header("User-Agent", "SkillsDesktop/1.3.4");
     
     if let Some(key) = &request.api_key {
         if !key.is_empty() {

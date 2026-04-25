@@ -121,8 +121,11 @@ Your skill content here...
 ## Contributing
 
 Issues and Pull Requests are welcome!
-Add function base on the project: https://github.com/buzhangsan/skills-manager-client
-  
+
+## Acknowledgements
+
+This project is built upon and extends the foundation of [skills-manager-client](https://github.com/buzhangsan/skills-manager-client). We sincerely thank the original authors for their pioneering work and open-source contribution.
+
 ## License
 
 MIT License

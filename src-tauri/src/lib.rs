@@ -1378,9 +1378,15 @@ pub struct FetchApiResponse {
 #[tauri::command(async)]
 async fn fetch_api(request: FetchApiRequest) -> Result<FetchApiResponse, String> {
     println!("[fetch_api] Requesting URL: {} (method: {}, proxy: {:?})", &request.url, request.method.as_deref().unwrap_or("GET"), &request.proxy_url);
+    println!("[fetch_api] API Key received: {}", match &request.api_key {
+        Some(k) if !k.is_empty() => format!("YES ({}...)", &k[..k.len().min(10)]),
+        Some(_) => "EMPTY".to_string(),
+        None => "NONE".to_string(),
+    });
     
     let mut client_builder = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30));
+        .timeout(std::time::Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::none()); // Disable auto-redirect to preserve Authorization header
     
     // Configure proxy if provided
     if let Some(ref proxy_url) = request.proxy_url {
@@ -1409,6 +1415,7 @@ async fn fetch_api(request: FetchApiRequest) -> Result<FetchApiResponse, String>
     
     if let Some(key) = &request.api_key {
         if !key.is_empty() {
+            println!("[fetch_api] Adding Authorization header: Bearer {}...", &key[..key.len().min(10)]);
             req_builder = req_builder.header("Authorization", format!("Bearer {}", key));
         }
     }
@@ -1427,10 +1434,47 @@ async fn fetch_api(request: FetchApiRequest) -> Result<FetchApiResponse, String>
         err_msg
     })?;
     
+    // Handle redirects manually - re-send with Authorization header preserved
+    let status = response.status().as_u16();
+    if status == 301 || status == 302 || status == 307 || status == 308 {
+        if let Some(location) = response.headers().get("location") {
+            let redirect_url = location.to_str().unwrap_or("").to_string();
+            println!("[fetch_api] Redirect {} -> {}", status, redirect_url);
+            
+            if !redirect_url.is_empty() {
+                let method2 = request.method.as_deref().unwrap_or("GET").to_uppercase();
+                let mut req2 = match method2.as_str() {
+                    "POST" => client.post(&redirect_url),
+                    _ => client.get(&redirect_url),
+                };
+                req2 = req2
+                    .header("Content-Type", "application/json")
+                    .header("User-Agent", "SkillsDesktop/1.3.2");
+                if let Some(key) = &request.api_key {
+                    if !key.is_empty() {
+                        req2 = req2.header("Authorization", format!("Bearer {}", key));
+                    }
+                }
+                if method2 == "POST" {
+                    if let Some(body) = &request.body {
+                        req2 = req2.body(body.clone());
+                    }
+                }
+                let response2 = req2.send().await.map_err(|e| format!("Redirect request failed: {}", e))?;
+                let status2 = response2.status().as_u16();
+                println!("[fetch_api] Redirect response status: {}", status2);
+                let body2 = response2.text().await.map_err(|e| format!("Failed to read redirect response: {}", e))?;
+                println!("[fetch_api] Response body: {}", &body2[..body2.len().min(500)]);
+                return Ok(FetchApiResponse { status: status2, body: body2 });
+            }
+        }
+    }
+    
     let status = response.status().as_u16();
     println!("[fetch_api] Response status: {}", status);
     
     let body = response.text().await.map_err(|e| format!("Failed to read response: {}", e))?;
+    println!("[fetch_api] Response body: {}", &body[..body.len().min(500)]);
     
     Ok(FetchApiResponse { status, body })
 }

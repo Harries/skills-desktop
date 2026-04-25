@@ -223,6 +223,8 @@ pub struct ImportGithubRequest {
     pub description_en: Option<String>,
     pub author: Option<String>,
     pub version: Option<String>,
+    #[serde(rename = "proxyUrl")]
+    pub proxy_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -567,7 +569,13 @@ async fn import_github_skill(request: ImportGithubRequest) -> Result<ImportResul
             let temp_dir = install_dir.join(".temp_clone");
             let _ = fs::remove_dir_all(&temp_dir);
 
-            let output = Command::new("git")
+            let mut git_cmd = Command::new("git");
+            if let Some(ref proxy) = request.proxy_url {
+                if !proxy.is_empty() {
+                    git_cmd.env("HTTP_PROXY", proxy).env("HTTPS_PROXY", proxy);
+                }
+            }
+            let output = git_cmd
                 .args(["clone", "--depth", "1", "--filter=blob:none", "--sparse", &repo_base, temp_dir.to_str().unwrap()])
                 .output();
 
@@ -661,7 +669,13 @@ async fn import_github_skill(request: ImportGithubRequest) -> Result<ImportResul
         } else {
             let _ = fs::remove_dir_all(&target_dir);
 
-            let output = Command::new("git")
+            let mut git_cmd = Command::new("git");
+            if let Some(ref proxy) = request.proxy_url {
+                if !proxy.is_empty() {
+                    git_cmd.env("HTTP_PROXY", proxy).env("HTTPS_PROXY", proxy);
+                }
+            }
+            let output = git_cmd
                 .args(["clone", "--depth", "1", &repo_url, target_dir.to_str().unwrap()])
                 .output();
 
@@ -1170,6 +1184,168 @@ fn remove_symlink(agent_id: String) -> Result<SymlinkStatus, String> {
     })
 }
 
+// ==================== 自定义软链接 ====================
+
+#[derive(Debug, Deserialize)]
+pub struct CustomSymlinkRequest {
+    #[serde(rename = "targetPath")]
+    pub target_path: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CustomSymlinkResult {
+    pub success: bool,
+    pub exists: bool,
+    pub error: Option<String>,
+}
+
+// 创建自定义软链接: ~/.claude/skills -> target_path
+#[tauri::command]
+fn create_custom_symlink(request: CustomSymlinkRequest) -> Result<CustomSymlinkResult, String> {
+    let home = dirs::home_dir().ok_or("Cannot determine home directory")?;
+    let source_dir = home.join(PRIMARY_SKILLS_DIR);
+
+    // Normalize: strip trailing slashes
+    let raw_path = request.target_path.trim_end_matches('/');
+
+    // target_path 支持 ~ 开头
+    let target_path = if raw_path.starts_with('~') {
+        home.join(raw_path.trim_start_matches('~').trim_start_matches('/'))
+    } else {
+        PathBuf::from(raw_path)
+    };
+
+    // 确保源目录存在
+    if !source_dir.exists() {
+        fs::create_dir_all(&source_dir).map_err(|e| e.to_string())?;
+    }
+
+    // 确保目标父目录存在
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    // 如果路径已存在，检查是否是符号链接
+    if target_path.exists() || target_path.symlink_metadata().is_ok() {
+        let metadata = fs::symlink_metadata(&target_path).map_err(|e| e.to_string())?;
+        if metadata.file_type().is_symlink() {
+            // 已是符号链接，删除重建
+            fs::remove_file(&target_path).map_err(|e| e.to_string())?;
+        } else {
+            return Ok(CustomSymlinkResult {
+                success: false,
+                exists: true,
+                error: Some(format!("Path '{}' already exists and is not a symlink. Please remove it manually.", target_path.display())),
+            });
+        }
+    }
+
+    // 创建符号链接
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&source_dir, &target_path)
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::symlink_dir(&source_dir, &target_path)
+            .map_err(|e| format!("Failed to create symlink (may need admin rights): {}", e))?;
+    }
+
+    Ok(CustomSymlinkResult {
+        success: true,
+        exists: true,
+        error: None,
+    })
+}
+
+// 移除自定义软链接
+#[tauri::command]
+fn remove_custom_symlink(request: CustomSymlinkRequest) -> Result<CustomSymlinkResult, String> {
+    let home = dirs::home_dir().ok_or("Cannot determine home directory")?;
+
+    let raw_path = request.target_path.trim_end_matches('/');
+    let target_path = if raw_path.starts_with('~') {
+        home.join(raw_path.trim_start_matches('~').trim_start_matches('/'))
+    } else {
+        PathBuf::from(raw_path)
+    };
+
+    if target_path.symlink_metadata().is_ok() {
+        let metadata = fs::symlink_metadata(&target_path).map_err(|e| e.to_string())?;
+        if metadata.file_type().is_symlink() {
+            fs::remove_file(&target_path).map_err(|e| e.to_string())?;
+            Ok(CustomSymlinkResult {
+                success: true,
+                exists: false,
+                error: None,
+            })
+        } else {
+            Ok(CustomSymlinkResult {
+                success: false,
+                exists: true,
+                error: Some("Path is not a symlink, refusing to remove".to_string()),
+            })
+        }
+    } else {
+        Ok(CustomSymlinkResult {
+            success: true,
+            exists: false,
+            error: None,
+        })
+    }
+}
+
+// 检查自定义软链接状态
+#[tauri::command]
+fn check_custom_symlink(request: CustomSymlinkRequest) -> Result<CustomSymlinkResult, String> {
+    let home = dirs::home_dir().ok_or("Cannot determine home directory")?;
+
+    let raw_path = request.target_path.trim_end_matches('/');
+    let target_path = if raw_path.starts_with('~') {
+        home.join(raw_path.trim_start_matches('~').trim_start_matches('/'))
+    } else {
+        PathBuf::from(raw_path)
+    };
+
+    if target_path.symlink_metadata().is_ok() {
+        let metadata = fs::symlink_metadata(&target_path).map_err(|e| e.to_string())?;
+        if metadata.file_type().is_symlink() {
+            // Check if it points to .claude/skills
+            match fs::read_link(&target_path) {
+                Ok(target) => {
+                    let is_valid = target.to_string_lossy().contains(".claude/skills");
+                    Ok(CustomSymlinkResult {
+                        success: true,
+                        exists: is_valid,
+                        error: if is_valid { None } else {
+                            Some(format!("Symlink points to: {}", target.display()))
+                        },
+                    })
+                }
+                Err(e) => Ok(CustomSymlinkResult {
+                    success: false,
+                    exists: true,
+                    error: Some(format!("Cannot read symlink: {}", e)),
+                }),
+            }
+        } else {
+            Ok(CustomSymlinkResult {
+                success: true,
+                exists: false,
+                error: Some("Path exists but is not a symlink".to_string()),
+            })
+        }
+    } else {
+        Ok(CustomSymlinkResult {
+            success: true,
+            exists: false,
+            error: None,
+        })
+    }
+}
+
 // 获取平台信息
 #[tauri::command]
 fn get_platform_info() -> Result<serde_json::Value, String> {
@@ -1188,6 +1364,8 @@ pub struct FetchApiRequest {
     pub api_key: Option<String>,
     pub method: Option<String>,  // GET or POST, default GET
     pub body: Option<String>,    // Request body for POST
+    #[serde(rename = "proxyUrl")]
+    pub proxy_url: Option<String>,  // e.g. http://127.0.0.1:7890
 }
 
 #[derive(Debug, Serialize)]
@@ -1198,10 +1376,22 @@ pub struct FetchApiResponse {
 
 #[tauri::command(async)]
 async fn fetch_api(request: FetchApiRequest) -> Result<FetchApiResponse, String> {
-    println!("[fetch_api] Requesting URL: {} (method: {})", &request.url, request.method.as_deref().unwrap_or("GET"));
+    println!("[fetch_api] Requesting URL: {} (method: {}, proxy: {:?})", &request.url, request.method.as_deref().unwrap_or("GET"), &request.proxy_url);
     
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+    let mut client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30));
+    
+    // Configure proxy if provided
+    if let Some(ref proxy_url) = request.proxy_url {
+        if !proxy_url.is_empty() {
+            let proxy = reqwest::Proxy::all(proxy_url)
+                .map_err(|e| format!("Invalid proxy URL '{}': {}", proxy_url, e))?;
+            client_builder = client_builder.proxy(proxy);
+            println!("[fetch_api] Using proxy: {}", proxy_url);
+        }
+    }
+    
+    let client = client_builder
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
     
@@ -1214,7 +1404,7 @@ async fn fetch_api(request: FetchApiRequest) -> Result<FetchApiResponse, String>
     
     req_builder = req_builder
         .header("Content-Type", "application/json")
-        .header("User-Agent", "SkillsDesktop/1.3.1");
+        .header("User-Agent", "SkillsDesktop/1.3.2");
     
     if let Some(key) = &request.api_key {
         if !key.is_empty() {
@@ -1266,7 +1456,10 @@ pub fn run() {
             create_all_symlinks,
             remove_symlink,
             get_platform_info,
-            fetch_api
+            fetch_api,
+            create_custom_symlink,
+            remove_custom_symlink,
+            check_custom_symlink
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

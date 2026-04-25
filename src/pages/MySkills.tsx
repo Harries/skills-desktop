@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSkillStore } from '../store/useSkillStore';
-import { Trash2, Eye, FolderOpen, X, Github, HardDrive, Plus, ExternalLink, RefreshCw, AlertCircle, CheckCircle, Package, Calendar, Download, CheckSquare, Square } from 'lucide-react';
+import { Trash2, Eye, FolderOpen, X, Github, HardDrive, Plus, ExternalLink, RefreshCw, AlertCircle, CheckCircle, Package, Calendar, Download, CheckSquare, Square, Search } from 'lucide-react';
 import type { InstalledSkill } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -29,6 +29,9 @@ const MySkills = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteResult, setDeleteResult] = useState<{show: boolean, success: boolean, message: string}>({show: false, success: false, message: ''});
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
 
   // 多选状态
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -132,8 +135,19 @@ const MySkills = () => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredSkills = installedSkills.filter(skill => {
-    if (activeTab === 'all') return true;
-    return skill.type === activeTab;
+    // Tab filter
+    if (activeTab !== 'all' && skill.type !== activeTab) return false;
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return (
+        skill.name.toLowerCase().includes(q) ||
+        skill.description?.toLowerCase().includes(q) ||
+        skill.author?.toLowerCase().includes(q) ||
+        skill.source?.toLowerCase().includes(q)
+      );
+    }
+    return true;
   });
 
   const handleViewSkill = async (skill: InstalledSkill) => {
@@ -289,6 +303,25 @@ const MySkills = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Search Bar - compact */}
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-base-content/40" />
+            <input
+              type="text"
+              placeholder={i18n.language === 'zh' ? '搜索 Skill...' : 'Search...'}
+              className="input input-sm bg-base-200/50 border border-base-300 w-40 rounded-xl pl-8 pr-7 text-sm focus:outline-none focus:border-primary focus:w-56 transition-all"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-base-content/40 hover:text-base-content"
+                onClick={() => setSearchQuery('')}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
           <button
             className="btn btn-ghost btn-sm gap-2 rounded-xl"
             onClick={() => checkSkillUpdates()}

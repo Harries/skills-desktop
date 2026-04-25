@@ -74,6 +74,10 @@ interface SkillStore {
   apiUrl: string;
   apiKey: string;
 
+  // Proxy Configuration
+  proxyEnabled: boolean;
+  proxyUrl: string;  // e.g. http://127.0.0.1:7890
+
   // Actions
   fetchMarketplaceSkills: (query?: string, page?: number) => Promise<void>;
   scanLocalSkills: () => Promise<void>;
@@ -90,6 +94,9 @@ interface SkillStore {
   clearLastSecurityReport: () => void;
   setApiUrl: (url: string) => void;
   setApiKey: (key: string) => void;
+  setProxyEnabled: (enabled: boolean) => void;
+  setProxyUrl: (url: string) => void;
+  getProxyUrl: () => string | null;  // returns proxy URL if enabled, null otherwise
 
   // 更新相关 Actions
   checkSkillUpdates: () => Promise<void>;
@@ -106,7 +113,7 @@ interface SkillStore {
   getPlatformInfo: () => Promise<void>;
 
   // 自定义软链接 Actions
-  createCustomSymlink: (targetPath: string) => Promise<boolean>;
+  createCustomSymlink: (targetPath: string) => Promise<{ success: boolean; error?: string }>;
   removeCustomSymlink: (targetPath: string) => Promise<boolean>;
   checkCustomSymlinks: () => Promise<void>;
   addCustomSymlinkPath: (path: string) => void;
@@ -147,12 +154,32 @@ export const useSkillStore = create<SkillStore>()(
       apiUrl: '',
       apiKey: '',
 
+      // Proxy Configuration
+      proxyEnabled: false,
+      proxyUrl: '',
+
       setApiUrl: (url: string) => {
         set({ apiUrl: url });
       },
 
       setApiKey: (key: string) => {
         set({ apiKey: key });
+      },
+
+      setProxyEnabled: (enabled: boolean) => {
+        set({ proxyEnabled: enabled });
+      },
+
+      setProxyUrl: (url: string) => {
+        set({ proxyUrl: url });
+      },
+
+      getProxyUrl: () => {
+        const state = get();
+        if (state.proxyEnabled && state.proxyUrl) {
+          return state.proxyUrl;
+        }
+        return null;
       },
 
       setDefaultInstallLocation: (location: 'system' | 'project') => {
@@ -321,7 +348,8 @@ export const useSkillStore = create<SkillStore>()(
           const response: { status: number; body: string } = await invoke('fetch_api', {
             request: {
               url: fullUrl,
-              apiKey: apiKey || null
+              apiKey: apiKey || null,
+              proxyUrl: get().getProxyUrl()
             }
           });
           const endTime = Date.now();
@@ -519,7 +547,8 @@ export const useSkillStore = create<SkillStore>()(
           request: {
             repoUrl: skill.githubUrl,
             installPath,
-            skipSecurityCheck: false
+            skipSecurityCheck: false,
+            proxyUrl: get().getProxyUrl()
           }
         });
 
@@ -557,7 +586,8 @@ export const useSkillStore = create<SkillStore>()(
                 url: 'https://skills.lc/api/install',
                 apiKey: null,
                 method: 'POST',
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify(requestBody),
+                proxyUrl: get().getProxyUrl()
               }
             });
             console.log('[installSkill] Install report response:', response);
@@ -653,7 +683,8 @@ export const useSkillStore = create<SkillStore>()(
           request: {
             repoUrl: url,
             installPath: finalInstallPath,
-            skipSecurityCheck: false
+            skipSecurityCheck: false,
+            proxyUrl: get().getProxyUrl()
           }
         });
 
@@ -678,7 +709,8 @@ export const useSkillStore = create<SkillStore>()(
                 url: 'https://skills.lc/api/install',
                 apiKey: null,
                 method: 'POST',
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify(requestBody),
+                proxyUrl: get().getProxyUrl()
               }
             });
             console.log('[importFromGithub] Install report response:', response);
@@ -891,7 +923,8 @@ export const useSkillStore = create<SkillStore>()(
             request: {
               repoUrl: skill.sourceUrl,
               installPath: skill.type === 'project' ? skill.localPath?.split('/.claude/skills')[0] : undefined,
-              skipSecurityCheck: false
+              skipSecurityCheck: false,
+              proxyUrl: get().getProxyUrl()
             }
           });
 
@@ -913,7 +946,8 @@ export const useSkillStore = create<SkillStore>()(
                     url: 'https://skills.lc/api/install',
                     apiKey: null,
                     method: 'POST',
-                    body: JSON.stringify(requestBody)
+                    body: JSON.stringify(requestBody),
+                    proxyUrl: get().getProxyUrl()
                   }
                 });
                 console.log('[reinstallSkill] Update report response:', response);
@@ -953,10 +987,10 @@ export const useSkillStore = create<SkillStore>()(
             request: { targetPath }
           });
           await get().checkCustomSymlinks();
-          return result.success;
+          return { success: result.success, error: result.error || undefined };
         } catch (error) {
           console.error(`Failed to create custom symlink to ${targetPath}:`, error);
-          return false;
+          return { success: false, error: String(error) };
         }
       },
 
@@ -1002,7 +1036,9 @@ export const useSkillStore = create<SkillStore>()(
         selectedProjectIndex: state.selectedProjectIndex,
         customSymlinks: state.customSymlinks,
         apiUrl: state.apiUrl,
-        apiKey: state.apiKey
+        apiKey: state.apiKey,
+        proxyEnabled: state.proxyEnabled,
+        proxyUrl: state.proxyUrl
       }),
     }
   )

@@ -1,8 +1,48 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSkillStore } from '../store/useSkillStore';
-import { Plus, X, FolderOpen, ExternalLink, Package, Check, Cpu, Settings2, Palette, AlertTriangle, Globe, Link2, Link2Off, RefreshCw, Monitor, CheckCircle2, Github, Heart, MessageCircle, Terminal, Key, Server, Eye, EyeOff, Save, RotateCcw, Play, XCircle } from 'lucide-react';
+import { Plus, X, FolderOpen, ExternalLink, Package, Check, Cpu, Settings2, Palette, AlertTriangle, Globe, Link2, Link2Off, RefreshCw, Monitor, CheckCircle2, Github, Heart, MessageCircle, Terminal, Key, Server, Eye, EyeOff, Save, RotateCcw, Play, XCircle, Shield, Search } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+
+// Native agents that are already managed in the built-in symlink/native sections
+const NATIVE_AGENT_IDS = new Set(['claude-code', 'github-copilot', 'cursor', 'opencode', 'antigravity', 'amp']);
+
+// Known agent global paths for custom symlink quick-select (excluding native agents)
+const KNOWN_AGENT_PATHS: { name: string; id: string; globalPath: string }[] = [
+  { name: 'Kimi Code CLI', id: 'kimi-cli', globalPath: '~/.config/agents/skills/' },
+  { name: 'Augment', id: 'augment', globalPath: '~/.augment/rules/' },
+  { name: 'OpenClaw', id: 'openclaw', globalPath: '~/.moltbot/skills/' },
+  { name: 'Cline', id: 'cline', globalPath: '~/.cline/skills/' },
+  { name: 'CodeBuddy', id: 'codebuddy', globalPath: '~/.codebuddy/skills/' },
+  { name: 'Codex', id: 'codex', globalPath: '~/.codex/skills/' },
+  { name: 'Command Code', id: 'command-code', globalPath: '~/.commandcode/skills/' },
+  { name: 'Continue', id: 'continue', globalPath: '~/.continue/skills/' },
+  { name: 'Crush', id: 'crush', globalPath: '~/.config/crush/skills/' },
+  { name: 'Droid', id: 'droid', globalPath: '~/.factory/skills/' },
+  { name: 'Gemini CLI', id: 'gemini-cli', globalPath: '~/.gemini/skills/' },
+  { name: 'Goose', id: 'goose', globalPath: '~/.config/goose/skills/' },
+  { name: 'Junie', id: 'junie', globalPath: '~/.junie/skills/' },
+  { name: 'iFlow CLI', id: 'iflow-cli', globalPath: '~/.iflow/skills/' },
+  { name: 'Kilo Code', id: 'kilo', globalPath: '~/.kilocode/skills/' },
+  { name: 'Kiro CLI', id: 'kiro-cli', globalPath: '~/.kiro/skills/' },
+  { name: 'Kode', id: 'kode', globalPath: '~/.kode/skills/' },
+  { name: 'MCPJam', id: 'mcpjam', globalPath: '~/.mcpjam/skills/' },
+  { name: 'Mistral Vibe', id: 'mistral-vibe', globalPath: '~/.vibe/skills/' },
+  { name: 'Mux', id: 'mux', globalPath: '~/.mux/skills/' },
+  { name: 'OpenClaude IDE', id: 'openclaude', globalPath: '~/.openclaude/skills/' },
+  { name: 'OpenHands', id: 'openhands', globalPath: '~/.openhands/skills/' },
+  { name: 'Pi', id: 'pi', globalPath: '~/.pi/agent/skills/' },
+  { name: 'Qoder', id: 'qoder', globalPath: '~/.qoder/skills/' },
+  { name: 'Qwen Code', id: 'qwen-code', globalPath: '~/.qwen/skills/' },
+  { name: 'Roo Code', id: 'roo', globalPath: '~/.roo/skills/' },
+  { name: 'Trae', id: 'trae', globalPath: '~/.trae/skills/' },
+  { name: 'Trae CN', id: 'trae-cn', globalPath: '~/.trae-cn/skills/' },
+  { name: 'Windsurf', id: 'windsurf', globalPath: '~/.codeium/windsurf/skills/' },
+  { name: 'Zencoder', id: 'zencoder', globalPath: '~/.zencoder/skills/' },
+  { name: 'Neovate', id: 'neovate', globalPath: '~/.neovate/skills/' },
+  { name: 'Pochi', id: 'pochi', globalPath: '~/.pochi/skills/' },
+  { name: 'AdaL', id: 'adal', globalPath: '~/.adal/skills/' },
+];
 
 const agentColors: Record<string, string> = {
   'claude-code': 'bg-orange-500',
@@ -42,8 +82,35 @@ const Settings = () => {
     apiKey,
     setApiUrl,
     setApiKey,
-    fetchMarketplaceSkills
+    fetchMarketplaceSkills,
+    proxyEnabled,
+    proxyUrl: storeProxyUrl,
+    setProxyEnabled,
+    setProxyUrl,
+    getProxyUrl,
+    customSymlinks,
+    addCustomSymlinkPath,
+    removeCustomSymlinkPath,
+    createCustomSymlink,
+    removeCustomSymlink,
+    checkCustomSymlinks
   } = useSkillStore();
+
+  // Normalize path for comparison: strip trailing slash, keep ~/
+  const normalizePath = (p: string) => p.replace(/\/+$/, '');
+  // Convert absolute home path to ~/ format
+  const toTildePath = (p: string) => {
+    const home = p.match(/^\/(?:Users|home)\/[^/]+/);
+    return home ? p.replace(home[0], '~') : p;
+  };
+  // Get all existing configured paths as a normalized set
+  const getExistingPathSet = () => {
+    return new Set([
+      ...agents.map(a => normalizePath(`~/${a.globalSkillsDir}`)),
+      ...customSymlinks.map(s => normalizePath(s.path)),
+      ...symlinkStatuses.map(s => normalizePath(toTildePath(s.linkPath))),
+    ]);
+  };
   const [paths, setPaths] = useState<string[]>([]);
   const [newPath, setNewPath] = useState('');
   const [isCreatingSymlinks, setIsCreatingSymlinks] = useState(false);
@@ -56,11 +123,24 @@ const Settings = () => {
   const [apiSaved, setApiSaved] = useState(false);
   const [testResult, setTestResult] = useState<{show: boolean, success: boolean, message: string}>({show: false, success: false, message: ''});
 
+  // Proxy Settings local state
+  const [localProxyEnabled, setLocalProxyEnabled] = useState(false);
+  const [localProxyUrl, setLocalProxyUrl] = useState('');
+  const [proxySaved, setProxySaved] = useState(false);
+  const [symlinkToast, setSymlinkToast] = useState<{show: boolean, success: boolean, message: string}>({show: false, success: false, message: ''});
+
+  // Custom symlink state
+  const [newCustomPath, setNewCustomPath] = useState('');
+  const [customActionInProgress, setCustomActionInProgress] = useState<string | null>(null);
+  const [showCustomSymlinkModal, setShowCustomSymlinkModal] = useState(false);
+  const [agentSearchQuery, setAgentSearchQuery] = useState('');
+
   // Collapse states
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     native: false,
     symlink: false,
     api: false,
+    proxy: false,
     install: false,
     paths: false,
     appearance: false,
@@ -75,6 +155,7 @@ const Settings = () => {
     fetchAgents();
     fetchSymlinkAgents();
     checkSymlinkStatus();
+    checkCustomSymlinks();
     getPlatformInfo();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -83,6 +164,12 @@ const Settings = () => {
     setLocalApiUrl(apiUrl);
     setLocalApiKey(apiKey);
   }, [apiUrl, apiKey]);
+
+  // Initialize local proxy settings from store
+  useEffect(() => {
+    setLocalProxyEnabled(proxyEnabled);
+    setLocalProxyUrl(storeProxyUrl);
+  }, [proxyEnabled, storeProxyUrl]);
 
   useEffect(() => {
     setPaths(projectPaths);
@@ -116,33 +203,87 @@ const Settings = () => {
   const handleCreateAllSymlinks = async () => {
     setIsCreatingSymlinks(true);
     try {
-      await createAllSymlinks();
+      const statuses = await createAllSymlinks();
+      const successCount = statuses.filter((s: any) => s.isValid).length;
+      const failCount = statuses.length - successCount;
+      const errorMsgs = statuses.filter((s: any) => s.error).map((s: any) => `${s.agentName}: ${s.error}`);
+      if (failCount > 0) {
+        setSymlinkToast({
+          show: true,
+          success: false,
+          message: i18n.language === 'zh'
+            ? `${successCount} 个成功，${failCount} 个失败${errorMsgs.length > 0 ? '\n' + errorMsgs.join('\n') : ''}`
+            : `${successCount} succeeded, ${failCount} failed${errorMsgs.length > 0 ? '\n' + errorMsgs.join('\n') : ''}`
+        });
+      } else {
+        setSymlinkToast({
+          show: true,
+          success: true,
+          message: i18n.language === 'zh' ? `全部 ${successCount} 个软链接创建成功` : `All ${successCount} symlinks created successfully`
+        });
+      }
     } catch (error) {
       console.error('Failed to create symlinks:', error);
+      setSymlinkToast({
+        show: true,
+        success: false,
+        message: i18n.language === 'zh' ? `创建失败: ${error}` : `Creation failed: ${error}`
+      });
     } finally {
       setIsCreatingSymlinks(false);
+      setTimeout(() => setSymlinkToast({show: false, success: false, message: ''}), 5000);
     }
   };
 
   const handleCreateSymlink = async (agentId: string) => {
     setActionInProgress(agentId);
     try {
-      await createSymlink(agentId);
+      const status = await createSymlink(agentId);
+      if (status.error) {
+        setSymlinkToast({
+          show: true,
+          success: false,
+          message: `${status.agentName}: ${status.error}`
+        });
+      } else if (status.isValid) {
+        setSymlinkToast({
+          show: true,
+          success: true,
+          message: i18n.language === 'zh' ? `${status.agentName} 软链接创建成功` : `${status.agentName} symlink created`
+        });
+      }
     } catch (error) {
       console.error(`Failed to create symlink for ${agentId}:`, error);
+      setSymlinkToast({
+        show: true,
+        success: false,
+        message: i18n.language === 'zh' ? `创建失败: ${error}` : `Creation failed: ${error}`
+      });
     } finally {
       setActionInProgress(null);
+      setTimeout(() => setSymlinkToast({show: false, success: false, message: ''}), 5000);
     }
   };
 
   const handleRemoveSymlink = async (agentId: string) => {
     setActionInProgress(agentId);
     try {
-      await removeSymlink(agentId);
+      const status = await removeSymlink(agentId);
+      setSymlinkToast({
+        show: true,
+        success: true,
+        message: i18n.language === 'zh' ? `${status.agentName} 软链接已移除` : `${status.agentName} symlink removed`
+      });
     } catch (error) {
       console.error(`Failed to remove symlink for ${agentId}:`, error);
+      setSymlinkToast({
+        show: true,
+        success: false,
+        message: i18n.language === 'zh' ? `移除失败: ${error}` : `Remove failed: ${error}`
+      });
     } finally {
       setActionInProgress(null);
+      setTimeout(() => setSymlinkToast({show: false, success: false, message: ''}), 5000);
     }
   };
 
@@ -209,7 +350,8 @@ const Settings = () => {
       const response: { status: number; body: string } = await invoke('fetch_api', {
         request: {
           url: fullUrl,
-          apiKey: testKey || null
+          apiKey: testKey || null,
+          proxyUrl: getProxyUrl()
         }
       });
       const data = JSON.parse(response.body);
@@ -250,6 +392,15 @@ const Settings = () => {
 
   return (
     <div className="flex gap-6 max-w-7xl">
+      {/* Symlink Toast */}
+      {symlinkToast.show && (
+        <div className="toast toast-top toast-end z-50">
+          <div className={`alert ${symlinkToast.success ? 'alert-success' : 'alert-error'} shadow-lg rounded-2xl max-w-sm`}>
+            <span className="whitespace-pre-line text-sm">{symlinkToast.message}</span>
+          </div>
+        </div>
+      )}
+
       {/* Left: Settings Sections */}
       <div className="flex-1 space-y-3">
         {/* Header */}
@@ -352,7 +503,7 @@ const Settings = () => {
                   {i18n.language === 'zh' ? '软链接配置' : 'Symlink Configuration'}
                 </span>
                 <span className="ml-2 text-xs text-base-content/50">
-                  {linkedCount}/{symlinkRequiredAgents.length} {i18n.language === 'zh' ? '已链接' : 'linked'}
+                  {linkedCount + customSymlinks.filter(s => s.exists).length}/{symlinkRequiredAgents.length + customSymlinks.length} {i18n.language === 'zh' ? '已链接' : 'linked'}
                 </span>
               </div>
               {linkedCount < symlinkRequiredAgents.length && (
@@ -384,6 +535,11 @@ const Settings = () => {
                       <div className="text-xs text-base-content/40 font-mono truncate">
                         ~/{agent.globalSkillsDir}
                       </div>
+                      {status?.error && !isLinked && (
+                        <div className="text-xs text-error mt-0.5 truncate" title={status.error}>
+                          {status.error}
+                        </div>
+                      )}
                     </div>
                     {isLinked ? (
                       <button
@@ -416,6 +572,100 @@ const Settings = () => {
                 );
               })}
             </div>
+
+            {/* Custom symlinks in the same list */}
+            {customSymlinks.map((symlink) => (
+              <div
+                key={`custom-${symlink.path}`}
+                className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
+                  symlink.exists ? 'bg-success/5 border border-success/20' : 'bg-base-100 border border-transparent'
+                }`}
+              >
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-secondary/20">
+                  <Terminal size={14} className="text-secondary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm flex items-center gap-1.5">
+                    {symlink.path.split('/').pop() || symlink.path}
+                    <span className="badge badge-xs badge-secondary badge-outline">{i18n.language === 'zh' ? '自定义' : 'Custom'}</span>
+                  </div>
+                  <div className="text-xs text-base-content/40 font-mono truncate" title={symlink.path}>
+                    {symlink.path}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {symlink.exists ? (
+                    <button
+                      className="btn btn-xs btn-ghost text-error gap-1"
+                      onClick={async () => {
+                        setCustomActionInProgress(symlink.path);
+                        try {
+                          const ok = await removeCustomSymlink(symlink.path);
+                          setSymlinkToast({
+                            show: true,
+                            success: ok,
+                            message: ok
+                              ? (i18n.language === 'zh' ? `已移除: ${symlink.path}` : `Removed: ${symlink.path}`)
+                              : (i18n.language === 'zh' ? `移除失败: ${symlink.path}` : `Remove failed: ${symlink.path}`)
+                          });
+                        } catch (e) {
+                          setSymlinkToast({ show: true, success: false, message: `${e}` });
+                        } finally {
+                          setCustomActionInProgress(null);
+                          setTimeout(() => setSymlinkToast({show: false, success: false, message: ''}), 5000);
+                        }
+                      }}
+                      disabled={customActionInProgress === symlink.path}
+                    >
+                      {customActionInProgress === symlink.path ? (
+                        <span className="loading loading-spinner loading-xs" />
+                      ) : (
+                        <Link2Off size={12} />
+                      )}
+                      {i18n.language === 'zh' ? '移除' : 'Remove'}
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-xs btn-primary gap-1"
+                      onClick={async () => {
+                        setCustomActionInProgress(symlink.path);
+                        try {
+                          const result = await createCustomSymlink(symlink.path);
+                          setSymlinkToast({
+                            show: true,
+                            success: result.success,
+                            message: result.success
+                              ? (i18n.language === 'zh' ? `已链接: ${symlink.path}` : `Linked: ${symlink.path}`)
+                              : (result.error || (i18n.language === 'zh' ? `链接失败: ${symlink.path}` : `Link failed: ${symlink.path}`))
+                          });
+                        } catch (e) {
+                          setSymlinkToast({ show: true, success: false, message: `${e}` });
+                        } finally {
+                          setCustomActionInProgress(null);
+                          setTimeout(() => setSymlinkToast({show: false, success: false, message: ''}), 5000);
+                        }
+                      }}
+                      disabled={customActionInProgress === symlink.path}
+                    >
+                      {customActionInProgress === symlink.path ? (
+                        <span className="loading loading-spinner loading-xs" />
+                      ) : (
+                        <Link2 size={12} />
+                      )}
+                      {i18n.language === 'zh' ? '链接' : 'Link'}
+                    </button>
+                  )}
+                  <button
+                    className="btn btn-xs btn-ghost text-base-content/40 hover:text-error"
+                    onClick={() => removeCustomSymlinkPath(symlink.path)}
+                    title={i18n.language === 'zh' ? '删除此条目' : 'Delete this entry'}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
+
             <div className="flex items-center gap-2 mt-4">
               <button
                 className="btn btn-sm btn-primary gap-2"
@@ -431,14 +681,176 @@ const Settings = () => {
               </button>
               <button
                 className="btn btn-sm btn-ghost gap-2"
-                onClick={() => checkSymlinkStatus()}
+                onClick={() => { checkSymlinkStatus(); checkCustomSymlinks(); }}
               >
                 <RefreshCw size={14} />
                 {i18n.language === 'zh' ? '刷新' : 'Refresh'}
               </button>
+              <button
+                className="btn btn-sm btn-secondary gap-2"
+                onClick={() => setShowCustomSymlinkModal(true)}
+              >
+                <Plus size={14} />
+                {i18n.language === 'zh' ? '自定义软链接' : 'Custom Symlink'}
+              </button>
             </div>
           </div>
         </div>
+
+        {/* Custom Symlink Modal */}
+        {showCustomSymlinkModal && (
+          <div className="modal modal-open">
+            <div className="modal-box rounded-2xl max-w-lg">
+              <button
+                className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
+                onClick={() => { setShowCustomSymlinkModal(false); setNewCustomPath(''); setAgentSearchQuery(''); }}
+              >
+                <X size={16} />
+              </button>
+              <h3 className="font-bold text-lg flex items-center gap-2 mb-1">
+                <Plus size={18} className="text-secondary" />
+                {i18n.language === 'zh' ? '添加自定义软链接' : 'Add Custom Symlink'}
+              </h3>
+              <p className="text-xs text-base-content/50 mb-4">
+                {i18n.language === 'zh'
+                  ? '选择已知 Agent 或手动输入自定义路径'
+                  : 'Select a known agent or enter a custom path manually'}
+              </p>
+
+              {/* Manual input */}
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  placeholder={i18n.language === 'zh' ? '输入目标路径，如 ~/.trae-cn/skills' : 'Target path, e.g. ~/.trae-cn/skills'}
+                  className="input input-bordered bg-base-200 flex-1 rounded-xl text-sm font-mono"
+                  value={newCustomPath}
+                  onChange={(e) => setNewCustomPath(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newCustomPath.trim()) {
+                      const path = newCustomPath.trim();
+                      const existingPaths = getExistingPathSet();
+                      if (existingPaths.has(normalizePath(path))) {
+                        setSymlinkToast({ show: true, success: false, message: i18n.language === 'zh' ? `该路径已添加过: ${path}` : `Path already configured: ${path}` });
+                        setTimeout(() => setSymlinkToast({show: false, success: false, message: ''}), 3000);
+                        return;
+                      }
+                      addCustomSymlinkPath(path);
+                      setNewCustomPath('');
+                      setAgentSearchQuery('');
+                      setShowCustomSymlinkModal(false);
+                    }
+                  }}
+                  autoFocus
+                />
+                <button
+                  className="btn btn-secondary rounded-xl gap-1"
+                  disabled={!newCustomPath.trim()}
+                  onClick={() => {
+                    const path = newCustomPath.trim();
+                    if (!path) return;
+                    const existingPaths = getExistingPathSet();
+                    if (existingPaths.has(normalizePath(path))) {
+                      setSymlinkToast({ show: true, success: false, message: i18n.language === 'zh' ? `该路径已添加过: ${path}` : `Path already configured: ${path}` });
+                      setTimeout(() => setSymlinkToast({show: false, success: false, message: ''}), 3000);
+                      return;
+                    }
+                    addCustomSymlinkPath(path);
+                    setNewCustomPath('');
+                    setAgentSearchQuery('');
+                    setShowCustomSymlinkModal(false);
+                  }}
+                >
+                  <Plus size={14} />
+                  {i18n.language === 'zh' ? '添加' : 'Add'}
+                </button>
+              </div>
+
+              {/* Quick-select known agents */}
+              <div className="border border-base-300 rounded-xl overflow-hidden">
+                <div className="bg-base-200/60 px-3 py-2 flex items-center gap-2">
+                  <Search size={14} className="text-base-content/40" />
+                  <input
+                    type="text"
+                    placeholder={i18n.language === 'zh' ? '搜索 Agent...' : 'Search agents...'}
+                    className="bg-transparent text-sm flex-1 outline-none placeholder:text-base-content/30"
+                    value={agentSearchQuery}
+                    onChange={(e) => setAgentSearchQuery(e.target.value)}
+                  />
+                  {agentSearchQuery && (
+                    <button className="btn btn-ghost btn-xs btn-circle" onClick={() => setAgentSearchQuery('')}>
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-56 overflow-y-auto divide-y divide-base-200">
+                  {(() => {
+                    const existingPaths = getExistingPathSet();
+                    const q = agentSearchQuery.toLowerCase();
+                    const filtered = KNOWN_AGENT_PATHS.filter(a =>
+                      (a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q) || a.globalPath.toLowerCase().includes(q))
+                    );
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="text-center py-6 text-base-content/30 text-sm">
+                          {i18n.language === 'zh' ? '未找到匹配的 Agent' : 'No matching agents found'}
+                        </div>
+                      );
+                    }
+                    return filtered.map(agent => {
+                      const isExisting = existingPaths.has(normalizePath(agent.globalPath));
+                      return (
+                        <button
+                          key={agent.id}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left ${
+                            isExisting ? 'opacity-40 cursor-not-allowed' : 'hover:bg-base-200/80 cursor-pointer'
+                          }`}
+                          disabled={isExisting}
+                          onClick={() => {
+                            if (isExisting) return;
+                            addCustomSymlinkPath(agent.globalPath);
+                            setNewCustomPath('');
+                            setAgentSearchQuery('');
+                            setShowCustomSymlinkModal(false);
+                          }}
+                        >
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${agentColors[agent.id] || 'bg-base-300'}`}>
+                            <Terminal size={12} className="text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium flex items-center gap-1.5">
+                              {agent.name}
+                              {isExisting && (
+                                <span className="badge badge-xs badge-ghost text-base-content/40">
+                                  {i18n.language === 'zh' ? '已添加' : 'Added'}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-base-content/40 font-mono truncate">{agent.globalPath}</div>
+                          </div>
+                          {isExisting ? (
+                            <Check size={14} className="text-success shrink-0" />
+                          ) : (
+                            <Plus size={14} className="text-base-content/30 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              <div className="modal-action">
+                <button
+                  className="btn btn-ghost rounded-xl"
+                  onClick={() => { setShowCustomSymlinkModal(false); setNewCustomPath(''); setAgentSearchQuery(''); }}
+                >
+                  {i18n.language === 'zh' ? '关闭' : 'Close'}
+                </button>
+              </div>
+            </div>
+            <div className="modal-backdrop" onClick={() => { setShowCustomSymlinkModal(false); setNewCustomPath(''); setAgentSearchQuery(''); }} />
+          </div>
+        )}
 
         {/* API Configuration */}
         <div className="collapse collapse-arrow bg-base-200/50 rounded-2xl border border-base-300">
@@ -600,7 +1012,136 @@ const Settings = () => {
             </div>
           </div>
         </div>
-
+        
+        {/* Proxy Configuration */}
+        <div className="collapse collapse-arrow bg-base-200/50 rounded-2xl border border-base-300">
+          <input
+            type="checkbox"
+            checked={expandedSections.proxy}
+            onChange={() => toggleSection('proxy')}
+          />
+          <div className="collapse-title pr-12">
+            <div className="flex items-center gap-3">
+              <div className="p-1.5 bg-orange-500/10 rounded-lg">
+                <Shield size={16} className="text-orange-500" />
+              </div>
+              <div className="flex-1">
+                <span className="font-semibold">
+                  {i18n.language === 'zh' ? '代理设置' : 'Proxy Settings'}
+                </span>
+              </div>
+              {proxyEnabled && storeProxyUrl ? (
+                <span className="stat-badge bg-success/20 text-success text-xs">
+                  {i18n.language === 'zh' ? '已启用' : 'Enabled'}
+                </span>
+              ) : (
+                <span className="stat-badge bg-base-300 text-xs">
+                  {i18n.language === 'zh' ? '未启用' : 'Disabled'}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="collapse-content">
+            <div className="pt-2 space-y-4">
+              {/* Proxy Toggle */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium">
+                    {i18n.language === 'zh' ? '启用代理' : 'Enable Proxy'}
+                  </div>
+                  <p className="text-xs text-base-content/50 mt-0.5">
+                    {i18n.language === 'zh'
+                      ? '启用后，所有外部请求将通过代理服务器'
+                      : 'When enabled, all external requests will go through the proxy'}
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  className="toggle toggle-primary toggle-sm"
+                  checked={localProxyEnabled}
+                  onChange={(e) => setLocalProxyEnabled(e.target.checked)}
+                />
+              </div>
+        
+              {/* Proxy URL */}
+              <div className={`space-y-2 transition-opacity ${localProxyEnabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <Globe size={14} className="text-base-content/50" />
+                  {i18n.language === 'zh' ? '代理地址' : 'Proxy URL'}
+                </label>
+                <input
+                  type="text"
+                  placeholder="http://127.0.0.1:7890"
+                  className="input input-sm bg-base-100 border-base-300 w-full rounded-lg text-sm font-mono"
+                  value={localProxyUrl}
+                  onChange={(e) => setLocalProxyUrl(e.target.value)}
+                />
+                <p className="text-xs text-base-content/50">
+                  {i18n.language === 'zh'
+                    ? '支持 HTTP/HTTPS/SOCKS5 代理，例如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080'
+                    : 'Supports HTTP/HTTPS/SOCKS5 proxy, e.g. http://127.0.0.1:7890 or socks5://127.0.0.1:1080'}
+                </p>
+              </div>
+        
+              {/* Save Proxy */}
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  className={`btn btn-sm gap-2 ${proxySaved ? 'btn-success' : 'btn-primary'}`}
+                  onClick={() => {
+                    setProxyEnabled(localProxyEnabled);
+                    setProxyUrl(localProxyUrl.trim());
+                    setProxySaved(true);
+                    setTimeout(() => setProxySaved(false), 1500);
+                  }}
+                  disabled={proxySaved}
+                >
+                  {proxySaved ? (
+                    <>
+                      <Check size={14} />
+                      {i18n.language === 'zh' ? '已保存' : 'Saved'}
+                    </>
+                  ) : (
+                    <>
+                      <Save size={14} />
+                      {i18n.language === 'zh' ? '保存设置' : 'Save Settings'}
+                    </>
+                  )}
+                </button>
+                <button
+                  className="btn btn-sm btn-ghost gap-2 text-base-content/60 hover:text-error"
+                  onClick={() => {
+                    setLocalProxyEnabled(false);
+                    setLocalProxyUrl('');
+                    setProxyEnabled(false);
+                    setProxyUrl('');
+                    setProxySaved(true);
+                    setTimeout(() => setProxySaved(false), 1500);
+                  }}
+                  disabled={proxySaved || (!localProxyEnabled && !localProxyUrl)}
+                >
+                  <RotateCcw size={14} />
+                  {i18n.language === 'zh' ? '重置' : 'Reset'}
+                </button>
+                {(localProxyEnabled !== proxyEnabled || localProxyUrl !== storeProxyUrl) && (
+                  <span className="text-xs text-warning flex items-center gap-1">
+                    <AlertTriangle size={12} />
+                    {i18n.language === 'zh' ? '有未保存的更改' : 'Unsaved changes'}
+                  </span>
+                )}
+              </div>
+        
+              {/* Info */}
+              <div className="bg-base-100 rounded-xl p-3 text-xs text-base-content/60 space-y-1">
+                <p>
+                  {i18n.language === 'zh'
+                    ? '代理将应用于：API 请求、GitHub Skill 下载（git clone）等所有外部网络请求'
+                    : 'Proxy applies to: API requests, GitHub skill downloads (git clone), and all external network requests'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
         {/* Installation Settings */}
         <div className="collapse collapse-arrow bg-base-200/50 rounded-2xl border border-base-300">
           <input
@@ -837,7 +1378,7 @@ const Settings = () => {
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-base-content/60">{i18n.language === 'zh' ? '版本' : 'Version'}</span>
-                <span className="font-mono font-semibold">v1.3.1</span>
+                <span className="font-mono font-semibold">v1.3.2</span>
               </div>
 
               <div className="divider my-2"></div>
@@ -963,6 +1504,76 @@ const Settings = () => {
                   </div>
                 </div>
               </a>
+            </div>
+          </div>
+
+          {/* Sponsors Card */}
+          <div className="bg-gradient-to-br from-base-200/80 to-base-200/40 rounded-2xl p-4 border border-base-300 relative overflow-hidden">
+            <div className="absolute -top-6 -right-6 w-20 h-20 bg-pink-500/5 rounded-full blur-2xl" />
+            <h3 className="font-bold mb-3 flex items-center gap-2 relative">
+              <div className="p-1 bg-gradient-to-br from-pink-500/20 to-rose-400/20 rounded-md">
+                <Heart size={14} className="text-pink-500" />
+              </div>
+              {i18n.language === 'zh' ? '赞助商' : 'Sponsors'}
+            </h3>
+
+            <div className="space-y-2.5 relative">
+              <a
+                href="#"
+                className="block p-3 bg-gradient-to-r from-base-100 to-blue-500/5 rounded-xl hover:from-blue-500/10 hover:to-indigo-500/10 transition-all group border border-transparent hover:border-blue-500/20"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  try {
+                    await invoke('open_url', { url: 'https://www.talktg.com/' });
+                  } catch (error) {
+                    console.error('Failed to open URL:', error);
+                  }
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg shrink-0 shadow-sm shadow-blue-500/20">
+                    <MessageCircle size={14} className="text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm flex items-center gap-1.5">
+                      TalkTG
+                      <ExternalLink size={10} className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-500" />
+                    </div>
+                    <p className="text-xs text-base-content/50 mt-0.5">
+                      {i18n.language === 'zh' ? '将 Telegram 变成你的服务台' : 'Turn Telegram into Your Help Desk'}
+                    </p>
+                  </div>
+                </div>
+              </a>
+
+              <a
+                href="#"
+                className="block p-3 bg-gradient-to-r from-base-100 to-emerald-500/5 rounded-xl hover:from-emerald-500/10 hover:to-green-500/10 transition-all group border border-transparent hover:border-emerald-500/20"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  try {
+                    await invoke('open_url', { url: 'https://www.issafesite.com/' });
+                  } catch (error) {
+                    console.error('Failed to open URL:', error);
+                  }
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gradient-to-br from-emerald-500 to-green-500 rounded-lg shrink-0 shadow-sm shadow-emerald-500/20">
+                    <Shield size={14} className="text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm flex items-center gap-1.5">
+                      IsSafeSite
+                      <ExternalLink size={10} className="opacity-0 group-hover:opacity-100 transition-opacity text-emerald-500" />
+                    </div>
+                    <p className="text-xs text-base-content/50 mt-0.5">
+                      {i18n.language === 'zh' ? '检测你的网站是否真正安全' : 'Know If Your Site Is Truly Secure'}
+                    </p>
+                  </div>
+                </div>
+              </a>
+
             </div>
           </div>
         </div>

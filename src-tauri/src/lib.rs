@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use walkdir::WalkDir;
+use tauri::Manager;
 
 mod security;
 use security::SecurityReport;
@@ -1438,6 +1439,13 @@ async fn fetch_api(request: FetchApiRequest) -> Result<FetchApiResponse, String>
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .setup(|app| {
+            // Initialize DevTools so it can be opened via Cmd+Option+I (macOS) / Ctrl+Shift+I (Windows)
+            let window = app.get_webview_window("main").unwrap();
+            window.open_devtools();
+            window.close_devtools();
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             scan_skills,
             import_github_skill,

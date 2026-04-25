@@ -22,7 +22,7 @@ jobs:
       - name: Checkout skills-data-hub
         uses: actions/checkout@v4
         with:
-          repository: buzhangsan/skills-data-hub
+          repository: Harries/skills-data-hub
           path: data-hub
 
       - name: Setup Node.js

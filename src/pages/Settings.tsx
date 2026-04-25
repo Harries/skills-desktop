@@ -1375,7 +1375,7 @@ const Settings = () => {
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-base-content/60">{i18n.language === 'zh' ? '版本' : 'Version'}</span>
-                <span className="font-mono font-semibold">v1.3.2</span>
+                <span className="font-mono font-semibold">v1.3.3</span>
               </div>
 
               <div className="divider my-2"></div>

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use walkdir::WalkDir;
 
@@ -9,6 +9,21 @@ use security::SecurityReport;
 
 // 主目录配置
 const PRIMARY_SKILLS_DIR: &str = ".claude/skills";
+
+/// 将路径转换为平台原生格式的字符串
+/// Windows: 统一使用反斜杠 \\
+/// Unix: 统一使用正斜杠 /
+fn normalize_path_str(path: &Path) -> String {
+    let s = path.to_string_lossy().to_string();
+    #[cfg(windows)]
+    {
+        s.replace('/', "\\")
+    }
+    #[cfg(not(windows))]
+    {
+        s
+    }
+}
 
 // 代理配置 - 基于 skill-dir.md 标准
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -451,7 +466,7 @@ fn parse_skill_md(path: &PathBuf, skill_type: &str) -> Option<SkillInfo> {
         description: description.clone(),
         description_zh: desc_zh.or_else(|| Some(description.clone())),
         description_en: desc_en.or_else(|| Some(description)),
-        path: skill_dir.to_string_lossy().to_string(),
+        path: normalize_path_str(skill_dir),
         skill_type: skill_type.to_string(),
         version: version_from_md.or_else(|| metadata.as_ref().and_then(|m| m.version.clone())),
         author: author_from_md.or_else(|| metadata.as_ref().and_then(|m| m.author.clone())),
@@ -682,7 +697,7 @@ async fn import_github_skill(request: ImportGithubRequest) -> Result<ImportResul
             
             return ImportResult {
                 success: true,
-                message: format!("Successfully installed {} to {}", skill_name, target_dir.display()),
+                message: format!("Successfully installed {} to {}", skill_name, normalize_path_str(&target_dir)),
                 blocked: false,
             };
         } else {
@@ -755,7 +770,7 @@ async fn import_github_skill(request: ImportGithubRequest) -> Result<ImportResul
 
         ImportResult {
             success: true,
-            message: format!("Successfully installed {} to {}", skill_name, target_dir.display()),
+            message: format!("Successfully installed {} to {}", skill_name, normalize_path_str(&target_dir)),
             blocked: false,
         }
     }).await.map_err(|e| e.to_string())?;
@@ -848,7 +863,7 @@ fn import_local_skill(request: ImportLocalRequest) -> Result<ImportResult, Strin
 
     Ok(ImportResult {
         success: true,
-        message: format!("Successfully imported {} to {}", request.skill_name, target_dir.display()),
+        message: format!("Successfully imported {} to {}", request.skill_name, normalize_path_str(&target_dir)),
         blocked: false,
     })
 }
@@ -1054,8 +1069,8 @@ fn remove_junction_or_symlink(path: &std::path::Path) -> Result<(), String> {
 #[cfg(windows)]
 fn create_junction(source: &std::path::Path, link: &std::path::Path) -> Result<(), String> {
     // 将路径转换为 Windows 原生格式 (反斜杠)
-    let link_str = link.to_string_lossy().replace('/', "\\");
-    let source_str = source.to_string_lossy().replace('/', "\\");
+    let link_str = normalize_path_str(link);
+    let source_str = normalize_path_str(source);
 
     // 方法1: 尝试 symlink_dir (如果开发者模式已开启，无需管理员)
     if std::os::windows::fs::symlink_dir(source, link).is_ok() {
@@ -1108,12 +1123,12 @@ fn check_symlink_status() -> Result<Vec<SymlinkStatus>, String> {
                     SymlinkStatus {
                         agent_id: agent.id.clone(),
                         agent_name: agent.display_name.clone(),
-                        target_path: source_dir.to_string_lossy().to_string(),
-                        link_path: link_path.to_string_lossy().to_string(),
+                        target_path: normalize_path_str(&source_dir),
+                        link_path: normalize_path_str(&link_path),
                         exists: true,
                         is_valid,
                         error: if is_valid { None } else {
-                            Some(format!("Points to: {}", target.display()))
+                            Some(format!("Points to: {}", normalize_path_str(&target)))
                         },
                     }
                 }
@@ -1122,8 +1137,8 @@ fn check_symlink_status() -> Result<Vec<SymlinkStatus>, String> {
                     SymlinkStatus {
                         agent_id: agent.id.clone(),
                         agent_name: agent.display_name.clone(),
-                        target_path: source_dir.to_string_lossy().to_string(),
-                        link_path: link_path.to_string_lossy().to_string(),
+                        target_path: normalize_path_str(&source_dir),
+                        link_path: normalize_path_str(&link_path),
                         exists: true,
                         is_valid: false,
                         error: Some("Path exists but is not a symlink".to_string()),
@@ -1134,8 +1149,8 @@ fn check_symlink_status() -> Result<Vec<SymlinkStatus>, String> {
             SymlinkStatus {
                 agent_id: agent.id.clone(),
                 agent_name: agent.display_name.clone(),
-                target_path: source_dir.to_string_lossy().to_string(),
-                link_path: link_path.to_string_lossy().to_string(),
+                target_path: normalize_path_str(&source_dir),
+                link_path: normalize_path_str(&link_path),
                 exists: false,
                 is_valid: false,
                 error: None,
@@ -1188,8 +1203,8 @@ fn create_symlink(agent_id: String) -> Result<SymlinkStatus, String> {
             return Ok(SymlinkStatus {
                 agent_id: agent.id.clone(),
                 agent_name: agent.display_name.clone(),
-                target_path: source_dir.to_string_lossy().to_string(),
-                link_path: link_path.to_string_lossy().to_string(),
+                target_path: normalize_path_str(&source_dir),
+                link_path: normalize_path_str(&link_path),
                 exists: true,
                 is_valid: false,
                 error: Some("Path exists and is not a symlink. Please remove it manually.".to_string()),
@@ -1213,8 +1228,8 @@ fn create_symlink(agent_id: String) -> Result<SymlinkStatus, String> {
     Ok(SymlinkStatus {
         agent_id: agent.id.clone(),
         agent_name: agent.display_name.clone(),
-        target_path: source_dir.to_string_lossy().to_string(),
-        link_path: link_path.to_string_lossy().to_string(),
+        target_path: normalize_path_str(&source_dir),
+        link_path: normalize_path_str(&link_path),
         exists: true,
         is_valid: true,
         error: None,
@@ -1277,7 +1292,7 @@ fn remove_symlink(agent_id: String) -> Result<SymlinkStatus, String> {
         agent_id: agent.id.clone(),
         agent_name: agent.display_name.clone(),
         target_path: "".to_string(),
-        link_path: link_path.to_string_lossy().to_string(),
+        link_path: normalize_path_str(&link_path),
         exists: false,
         is_valid: false,
         error: None,
@@ -1341,7 +1356,7 @@ fn create_custom_symlink(request: CustomSymlinkRequest) -> Result<CustomSymlinkR
             return Ok(CustomSymlinkResult {
                 success: false,
                 exists: true,
-                error: Some(format!("Path '{}' already exists and is not a symlink. Please remove it manually.", target_path.display())),
+                error: Some(format!("Path '{}' already exists and is not a symlink. Please remove it manually.", normalize_path_str(&target_path))),
             });
         }
     }
@@ -1432,7 +1447,7 @@ fn check_custom_symlink(request: CustomSymlinkRequest) -> Result<CustomSymlinkRe
                     success: true,
                     exists: is_valid,
                     error: if is_valid { None } else {
-                        Some(format!("Symlink/junction points to: {}", target.display()))
+                        Some(format!("Symlink/junction points to: {}", normalize_path_str(&target)))
                     },
                 })
             }

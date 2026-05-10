@@ -411,9 +411,9 @@ const Settings = () => {
                     {platform.os.toUpperCase()} · {platform.arch}
                   </span>
                   {platform.os === 'windows' && (
-                    <span className="text-warning flex items-center gap-1">
+                    <span className="text-info flex items-center gap-1">
                       <AlertTriangle size={12} />
-                      {t('adminRequired')}
+                      {t('junctionMode')}
                     </span>
                   )}
                 </>

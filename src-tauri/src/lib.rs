@@ -570,6 +570,11 @@ async fn import_github_skill(request: ImportGithubRequest) -> Result<ImportResul
             let _ = fs::remove_dir_all(&temp_dir);
 
             let mut git_cmd = Command::new("git");
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                git_cmd.creation_flags(0x08000000);
+            }
             if let Some(ref proxy) = request.proxy_url {
                 if !proxy.is_empty() {
                     git_cmd.env("HTTP_PROXY", proxy).env("HTTPS_PROXY", proxy);
@@ -601,10 +606,17 @@ async fn import_github_skill(request: ImportGithubRequest) -> Result<ImportResul
                 }
             }
 
-            let sparse_output = Command::new("git")
-                .current_dir(&temp_dir)
-                .args(["sparse-checkout", "set", &subpath])
-                .output();
+            let sparse_output = {
+                let mut cmd = Command::new("git");
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    cmd.creation_flags(0x08000000);
+                }
+                cmd.current_dir(&temp_dir)
+                    .args(["sparse-checkout", "set", &subpath])
+                    .output()
+            };
             
             match &sparse_output {
                 Err(e) => println!("[import_github_skill] Sparse-checkout error: {}", e),
@@ -612,10 +624,17 @@ async fn import_github_skill(request: ImportGithubRequest) -> Result<ImportResul
                 Ok(_) => println!("[import_github_skill] Sparse-checkout succeeded"),
             }
 
-            let checkout_output = Command::new("git")
-                .current_dir(&temp_dir)
-                .args(["checkout", branch])
-                .output();
+            let checkout_output = {
+                let mut cmd = Command::new("git");
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    cmd.creation_flags(0x08000000);
+                }
+                cmd.current_dir(&temp_dir)
+                    .args(["checkout", branch])
+                    .output()
+            };
                 
             match &checkout_output {
                 Err(e) => println!("[import_github_skill] Checkout error: {}", e),
@@ -670,6 +689,11 @@ async fn import_github_skill(request: ImportGithubRequest) -> Result<ImportResul
             let _ = fs::remove_dir_all(&target_dir);
 
             let mut git_cmd = Command::new("git");
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                git_cmd.creation_flags(0x08000000);
+            }
             if let Some(ref proxy) = request.proxy_url {
                 if !proxy.is_empty() {
                     git_cmd.env("HTTP_PROXY", proxy).env("HTTPS_PROXY", proxy);
@@ -695,18 +719,25 @@ async fn import_github_skill(request: ImportGithubRequest) -> Result<ImportResul
         }
 
         // 获取 commit hash
-        let commit_hash = Command::new("git")
-            .current_dir(&target_dir)
-            .args(["rev-parse", "HEAD"])
-            .output()
-            .ok()
-            .and_then(|o| {
-                if o.status.success() {
-                    Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
-                } else {
-                    None
-                }
-            });
+        let commit_hash = {
+            let mut cmd = Command::new("git");
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
+            cmd.current_dir(&target_dir)
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .ok()
+                .and_then(|o| {
+                    if o.status.success() {
+                        Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+                    } else {
+                        None
+                    }
+                })
+        };
 
         // 保存元数据
         let metadata = SkillMetadata {
@@ -894,8 +925,10 @@ fn open_url(url: String) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         Command::new("cmd")
             .args(["/c", "start", "", &url])
+            .creation_flags(0x08000000)
             .spawn()
             .map_err(|e| e.to_string())?;
     }
@@ -1001,31 +1034,45 @@ fn get_symlink_agents_config() -> Result<Vec<AgentConfig>, String> {
     Ok(get_symlink_agents())
 }
 
-// Windows: 检查路径是否是 junction 或 symlink
-#[cfg(windows)]
-fn is_junction_or_symlink(path: &std::path::Path) -> bool {
-    // Try read_link - works for both junctions and symlinks on Windows
-    fs::read_link(path).is_ok()
-}
-
 // Windows: 移除 junction 或 symlink
 #[cfg(windows)]
 fn remove_junction_or_symlink(path: &std::path::Path) -> Result<(), String> {
-    // Try remove as symlink first (remove_file), then as junction (remove_dir)
+    // Junctions are directory reparse points - remove with remove_dir
+    // Symlinks can be removed with remove_file
+    // Try remove_dir first (works for junctions), then remove_file (works for symlinks)
+    if fs::remove_dir(path).is_ok() {
+        return Ok(());
+    }
     if fs::remove_file(path).is_ok() {
         return Ok(());
     }
-    fs::remove_dir(path)
-        .map_err(|e| format!("Failed to remove junction/symlink: {}", e))
+    Err(format!("Failed to remove junction/symlink: {}", path.display()))
 }
 
 // Windows: 创建 directory junction (不需要管理员权限)
+// 策略: 先尝试 symlink_dir (开发者模式下可用), 失败则用 mklink /J junction
 #[cfg(windows)]
 fn create_junction(source: &std::path::Path, link: &std::path::Path) -> Result<(), String> {
+    // 将路径转换为 Windows 原生格式 (反斜杠)
+    let link_str = link.to_string_lossy().replace('/', "\\");
+    let source_str = source.to_string_lossy().replace('/', "\\");
+
+    // 方法1: 尝试 symlink_dir (如果开发者模式已开启，无需管理员)
+    if std::os::windows::fs::symlink_dir(source, link).is_ok() {
+        return Ok(());
+    }
+
+    // 方法2: 使用 mklink /J 创建 junction (不需要任何特殊权限)
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
     let output = Command::new("cmd")
-        .args(["/c", "mklink", "/J",
-            &link.to_string_lossy(),
-            &source.to_string_lossy()])
+        .arg("/c")
+        .arg("mklink")
+        .arg("/J")
+        .arg(&link_str)
+        .arg(&source_str)
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|e| format!("Failed to execute mklink: {}", e))?;
 
@@ -1033,7 +1080,10 @@ fn create_junction(source: &std::path::Path, link: &std::path::Path) -> Result<(
         Ok(())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("mklink /J failed: {}", stderr))
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // mklink 有时将错误输出到 stdout
+        let error_msg = if stderr.trim().is_empty() { stdout } else { stderr };
+        Err(format!("mklink /J failed: {}", error_msg.trim()))
     }
 }
 

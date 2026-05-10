@@ -1001,6 +1001,42 @@ fn get_symlink_agents_config() -> Result<Vec<AgentConfig>, String> {
     Ok(get_symlink_agents())
 }
 
+// Windows: 检查路径是否是 junction 或 symlink
+#[cfg(windows)]
+fn is_junction_or_symlink(path: &std::path::Path) -> bool {
+    // Try read_link - works for both junctions and symlinks on Windows
+    fs::read_link(path).is_ok()
+}
+
+// Windows: 移除 junction 或 symlink
+#[cfg(windows)]
+fn remove_junction_or_symlink(path: &std::path::Path) -> Result<(), String> {
+    // Try remove as symlink first (remove_file), then as junction (remove_dir)
+    if fs::remove_file(path).is_ok() {
+        return Ok(());
+    }
+    fs::remove_dir(path)
+        .map_err(|e| format!("Failed to remove junction/symlink: {}", e))
+}
+
+// Windows: 创建 directory junction (不需要管理员权限)
+#[cfg(windows)]
+fn create_junction(source: &std::path::Path, link: &std::path::Path) -> Result<(), String> {
+    let output = Command::new("cmd")
+        .args(["/c", "mklink", "/J",
+            &link.to_string_lossy(),
+            &source.to_string_lossy()])
+        .output()
+        .map_err(|e| format!("Failed to execute mklink: {}", e))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("mklink /J failed: {}", stderr))
+    }
+}
+
 // 检查所有软链接状态
 #[tauri::command]
 fn check_symlink_status() -> Result<Vec<SymlinkStatus>, String> {
@@ -1012,12 +1048,13 @@ fn check_symlink_status() -> Result<Vec<SymlinkStatus>, String> {
     for agent in agents {
         let link_path = home.join(&agent.global_skills_dir);
 
-        let status = if link_path.exists() {
-            // 检查是否是有效的符号链接
+        let status = if link_path.exists() || link_path.symlink_metadata().is_ok() {
+            // 检查是否是有效的符号链接或 junction
             match fs::read_link(&link_path) {
                 Ok(target) => {
                     let is_valid = target == source_dir ||
-                        target.to_string_lossy().contains(".claude/skills");
+                        target.to_string_lossy().contains(".claude/skills") ||
+                        target.to_string_lossy().contains(".claude\\skills");
                     SymlinkStatus {
                         agent_id: agent.id.clone(),
                         agent_name: agent.display_name.clone(),
@@ -1031,7 +1068,7 @@ fn check_symlink_status() -> Result<Vec<SymlinkStatus>, String> {
                     }
                 }
                 Err(_) => {
-                    // 存在但不是符号链接（可能是普通目录）
+                    // 存在但不是符号链接/junction（可能是普通目录）
                     SymlinkStatus {
                         agent_id: agent.id.clone(),
                         agent_name: agent.display_name.clone(),
@@ -1084,12 +1121,19 @@ fn create_symlink(agent_id: String) -> Result<SymlinkStatus, String> {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
 
-    // 如果路径已存在，检查是否是符号链接
-    if link_path.exists() {
-        let metadata = fs::symlink_metadata(&link_path).map_err(|e| e.to_string())?;
-        if metadata.file_type().is_symlink() {
-            // 已是符号链接，删除重建
-            fs::remove_file(&link_path).map_err(|e| e.to_string())?;
+    // 如果路径已存在，检查是否是符号链接/junction
+    if link_path.exists() || link_path.symlink_metadata().is_ok() {
+        // Check if it's a symlink or junction (read_link works for both)
+        if fs::read_link(&link_path).is_ok() {
+            // 已是符号链接/junction，删除重建
+            #[cfg(unix)]
+            {
+                fs::remove_file(&link_path).map_err(|e| e.to_string())?;
+            }
+            #[cfg(windows)]
+            {
+                remove_junction_or_symlink(&link_path)?;
+            }
         } else {
             return Ok(SymlinkStatus {
                 agent_id: agent.id.clone(),
@@ -1103,7 +1147,7 @@ fn create_symlink(agent_id: String) -> Result<SymlinkStatus, String> {
         }
     }
 
-    // 创建符号链接
+    // 创建符号链接 (Unix) / Junction (Windows)
     #[cfg(unix)]
     {
         std::os::unix::fs::symlink(&source_dir, &link_path)
@@ -1112,9 +1156,8 @@ fn create_symlink(agent_id: String) -> Result<SymlinkStatus, String> {
 
     #[cfg(windows)]
     {
-        // Windows 需要管理员权限或开发者模式
-        std::os::windows::fs::symlink_dir(&source_dir, &link_path)
-            .map_err(|e| format!("Failed to create symlink (may need admin rights): {}", e))?;
+        // 使用 directory junction，不需要管理员权限
+        create_junction(&source_dir, &link_path)?;
     }
 
     Ok(SymlinkStatus {
@@ -1164,12 +1207,19 @@ fn remove_symlink(agent_id: String) -> Result<SymlinkStatus, String> {
 
     let link_path = home.join(&agent.global_skills_dir);
 
-    if link_path.exists() {
-        let metadata = fs::symlink_metadata(&link_path).map_err(|e| e.to_string())?;
-        if metadata.file_type().is_symlink() {
-            fs::remove_file(&link_path).map_err(|e| e.to_string())?;
+    if link_path.exists() || link_path.symlink_metadata().is_ok() {
+        // Check if it's a symlink or junction
+        if fs::read_link(&link_path).is_ok() {
+            #[cfg(unix)]
+            {
+                fs::remove_file(&link_path).map_err(|e| e.to_string())?;
+            }
+            #[cfg(windows)]
+            {
+                remove_junction_or_symlink(&link_path)?;
+            }
         } else {
-            return Err("Path is not a symlink, refusing to remove".to_string());
+            return Err("Path is not a symlink/junction, refusing to remove".to_string());
         }
     }
 
@@ -1225,12 +1275,18 @@ fn create_custom_symlink(request: CustomSymlinkRequest) -> Result<CustomSymlinkR
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
 
-    // 如果路径已存在，检查是否是符号链接
+    // 如果路径已存在，检查是否是符号链接/junction
     if target_path.exists() || target_path.symlink_metadata().is_ok() {
-        let metadata = fs::symlink_metadata(&target_path).map_err(|e| e.to_string())?;
-        if metadata.file_type().is_symlink() {
-            // 已是符号链接，删除重建
-            fs::remove_file(&target_path).map_err(|e| e.to_string())?;
+        if fs::read_link(&target_path).is_ok() {
+            // 已是符号链接/junction，删除重建
+            #[cfg(unix)]
+            {
+                fs::remove_file(&target_path).map_err(|e| e.to_string())?;
+            }
+            #[cfg(windows)]
+            {
+                remove_junction_or_symlink(&target_path)?;
+            }
         } else {
             return Ok(CustomSymlinkResult {
                 success: false,
@@ -1240,7 +1296,7 @@ fn create_custom_symlink(request: CustomSymlinkRequest) -> Result<CustomSymlinkR
         }
     }
 
-    // 创建符号链接
+    // 创建符号链接 (Unix) / Junction (Windows)
     #[cfg(unix)]
     {
         std::os::unix::fs::symlink(&source_dir, &target_path)
@@ -1249,8 +1305,8 @@ fn create_custom_symlink(request: CustomSymlinkRequest) -> Result<CustomSymlinkR
 
     #[cfg(windows)]
     {
-        std::os::windows::fs::symlink_dir(&source_dir, &target_path)
-            .map_err(|e| format!("Failed to create symlink (may need admin rights): {}", e))?;
+        // 使用 directory junction，不需要管理员权限
+        create_junction(&source_dir, &target_path)?;
     }
 
     Ok(CustomSymlinkResult {
@@ -1273,9 +1329,16 @@ fn remove_custom_symlink(request: CustomSymlinkRequest) -> Result<CustomSymlinkR
     };
 
     if target_path.symlink_metadata().is_ok() {
-        let metadata = fs::symlink_metadata(&target_path).map_err(|e| e.to_string())?;
-        if metadata.file_type().is_symlink() {
-            fs::remove_file(&target_path).map_err(|e| e.to_string())?;
+        // Check if it's a symlink or junction
+        if fs::read_link(&target_path).is_ok() {
+            #[cfg(unix)]
+            {
+                fs::remove_file(&target_path).map_err(|e| e.to_string())?;
+            }
+            #[cfg(windows)]
+            {
+                remove_junction_or_symlink(&target_path)?;
+            }
             Ok(CustomSymlinkResult {
                 success: true,
                 exists: false,
@@ -1285,7 +1348,7 @@ fn remove_custom_symlink(request: CustomSymlinkRequest) -> Result<CustomSymlinkR
             Ok(CustomSymlinkResult {
                 success: false,
                 exists: true,
-                error: Some("Path is not a symlink, refusing to remove".to_string()),
+                error: Some("Path is not a symlink/junction, refusing to remove".to_string()),
             })
         }
     } else {
@@ -1310,32 +1373,27 @@ fn check_custom_symlink(request: CustomSymlinkRequest) -> Result<CustomSymlinkRe
     };
 
     if target_path.symlink_metadata().is_ok() {
-        let metadata = fs::symlink_metadata(&target_path).map_err(|e| e.to_string())?;
-        if metadata.file_type().is_symlink() {
-            // Check if it points to .claude/skills
-            match fs::read_link(&target_path) {
-                Ok(target) => {
-                    let is_valid = target.to_string_lossy().contains(".claude/skills");
-                    Ok(CustomSymlinkResult {
-                        success: true,
-                        exists: is_valid,
-                        error: if is_valid { None } else {
-                            Some(format!("Symlink points to: {}", target.display()))
-                        },
-                    })
-                }
-                Err(e) => Ok(CustomSymlinkResult {
-                    success: false,
-                    exists: true,
-                    error: Some(format!("Cannot read symlink: {}", e)),
-                }),
+        // Check if it's a symlink or junction (read_link works for both)
+        match fs::read_link(&target_path) {
+            Ok(target) => {
+                let is_valid = target.to_string_lossy().contains(".claude/skills")
+                    || target.to_string_lossy().contains(".claude\\skills");
+                Ok(CustomSymlinkResult {
+                    success: true,
+                    exists: is_valid,
+                    error: if is_valid { None } else {
+                        Some(format!("Symlink/junction points to: {}", target.display()))
+                    },
+                })
             }
-        } else {
-            Ok(CustomSymlinkResult {
-                success: true,
-                exists: false,
-                error: Some("Path exists but is not a symlink".to_string()),
-            })
+            Err(_) => {
+                // Path exists but is not a symlink/junction
+                Ok(CustomSymlinkResult {
+                    success: true,
+                    exists: false,
+                    error: Some("Path exists but is not a symlink/junction".to_string()),
+                })
+            }
         }
     } else {
         Ok(CustomSymlinkResult {

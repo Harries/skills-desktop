@@ -166,6 +166,7 @@ const resources = {
 
       // Settings Page
       adminRequired: "Admin required",
+      junctionMode: "Junction mode (no admin needed)",
       nativeCompatibleAgents: "Native Compatible Agents",
       agentsCount: "agents",
       nativeAgentsDesc: "These agents auto-scan Claude Code skills directory, no configuration needed",
@@ -421,6 +422,7 @@ const resources = {
 
       // 设置页面
       adminRequired: "需管理员权限",
+      junctionMode: "Junction 模式（无需管理员）",
       nativeCompatibleAgents: "原生兼容 Agents",
       agentsCount: "个",
       nativeAgentsDesc: "这些 Agents 自动扫描 Claude Code Skills 目录，无需额外配置",
@@ -657,6 +659,7 @@ const resources = {
 
       // 設定ページ
       adminRequired: "管理者権限が必要",
+      junctionMode: "Junctionモード（管理者不要）",
       nativeCompatibleAgents: "ネイティブ対応エージェント",
       agentsCount: "エージェント",
       nativeAgentsDesc: "これらのエージェントはClaude Codeスキルディレクトリを自動スキャンします。追加設定は不要です",
@@ -891,6 +894,7 @@ const resources = {
 
       // 설정 페이지
       adminRequired: "관리자 권한 필요",
+      junctionMode: "Junction 모드 (관리자 불필요)",
       nativeCompatibleAgents: "네이티브 호환 에이전트",
       agentsCount: "에이전트",
       nativeAgentsDesc: "이 에이전트는 Claude Code 스킬 디렉토리를 자동으로 스캔합니다. 추가 설정 불필요",
@@ -1125,6 +1129,7 @@ const resources = {
 
       // Página de Configuración
       adminRequired: "Se requiere administrador",
+      junctionMode: "Modo Junction (sin admin)",
       nativeCompatibleAgents: "Agentes Nativos Compatibles",
       agentsCount: "agentes",
       nativeAgentsDesc: "Estos agentes escanean automáticamente el directorio de skills de Claude Code, sin configuración adicional",
@@ -1359,6 +1364,7 @@ const resources = {
 
       // Page de Paramètres
       adminRequired: "Administrateur requis",
+      junctionMode: "Mode Junction (sans admin)",
       nativeCompatibleAgents: "Agents Natifs Compatibles",
       agentsCount: "agents",
       nativeAgentsDesc: "Ces agents analysent automatiquement le répertoire des skills Claude Code, aucune configuration nécessaire",
@@ -1593,6 +1599,7 @@ const resources = {
 
       // Einstellungsseite
       adminRequired: "Administrator erforderlich",
+      junctionMode: "Junction-Modus (kein Admin nötig)",
       nativeCompatibleAgents: "Nativ Kompatible Agenten",
       agentsCount: "Agenten",
       nativeAgentsDesc: "Diese Agenten scannen automatisch das Claude Code Skills-Verzeichnis, keine Konfiguration erforderlich",
@@ -1827,6 +1834,7 @@ const resources = {
 
       // Página de Configurações
       adminRequired: "Administrador necessário",
+      junctionMode: "Modo Junction (sem admin)",
       nativeCompatibleAgents: "Agentes Nativos Compatíveis",
       agentsCount: "agentes",
       nativeAgentsDesc: "Estes agentes verificam automaticamente o diretório de skills do Claude Code, sem configuração necessária",
@@ -2061,6 +2069,7 @@ const resources = {
 
       // صفحة الإعدادات
       adminRequired: "يتطلب صلاحيات المسؤول",
+      junctionMode: "وضع Junction (بدون صلاحيات)",
       nativeCompatibleAgents: "الوكلاء المتوافقون أصلياً",
       agentsCount: "وكلاء",
       nativeAgentsDesc: "هؤلاء الوكلاء يفحصون دليل مهارات Claude Code تلقائياً، لا حاجة لإعداد إضافي",

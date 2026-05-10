@@ -1,6 +1,6 @@
 [package]
 name = "skills-desktop"
-version = "1.3.4"
+version = "1.3.5"
 description = "Skills Desktop App"
 authors = ["you"]
 license = ""
